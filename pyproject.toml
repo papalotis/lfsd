@@ -13,6 +13,9 @@ dynamic = ["version", "description"]
 dependencies = [
     "numpy",
     "asyncio_dgram",
+    'uvloop ; platform_system != "Windows"',
+    # pyvjoy but only on windows
+    'pyvjoy ; platform_system == "Windows"',
 ]
 
 [project.optional-dependencies]

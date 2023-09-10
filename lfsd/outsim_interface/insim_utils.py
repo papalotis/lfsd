@@ -73,6 +73,6 @@ def handle_insim_packet(packet: bytes) -> tuple[bytes | None, str | None]:
         *_, name = struct.unpack("6BH32s", packet)
         return None, name.replace(b"\x00", b"").decode()
     elif packet_type == isp_rst:
-        print("race starting")
+        pass
 
     return None, None

@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
-from lfsd.lyt_interface.cone_observation import ConeTypes
+
 from lfsd.common_types import FloatArray
+from lfsd.lyt_interface.cone_observation import ConeTypes
 from lfsd.lyt_interface.io.common import (
     BLOCK_STRUCT,
     HEADER_STRUCT,
@@ -109,7 +110,7 @@ def load_lyt_file(filename: Path | str) -> list[FloatArray]:
     all_cones_per_type = extract_cone_lists(blocks_data)
 
     all_cones_per_type_arrays = [
-        np.array(cone_list) for cone_list in all_cones_per_type
+        np.array(cone_list).reshape(-1, 2) for cone_list in all_cones_per_type
     ]
 
     return all_cones_per_type_arrays

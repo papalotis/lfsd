@@ -28,6 +28,7 @@ def rotate(points: FloatArray, theta: float) -> FloatArray:
     rotation_matrix = np.array(((cos_theta, -sin_theta), (sin_theta, cos_theta))).T
     return np.dot(points, rotation_matrix)
 
+
 def vec_dot(vecs1: np.ndarray, vecs2: np.ndarray) -> np.ndarray:
     """
     Mutliplies vectors in an array elementwise
@@ -40,6 +41,7 @@ def vec_dot(vecs1: np.ndarray, vecs2: np.ndarray) -> np.ndarray:
         np.array: The results
     """
     return np.sum(vecs1 * vecs2, axis=-1)
+
 
 def vec_angle_between(
     vecs1: np.ndarray, vecs2: np.ndarray, clip_cos_theta: bool = True
@@ -160,6 +162,7 @@ def trace_to_global_space(
     """
     car_angle = -np.arctan2(*car_dir[::-1])
     return rotate(trace, car_angle) + car_pos
+
 
 def angle_from_2d_vector(vecs: np.ndarray) -> np.ndarray:
     """

@@ -31,4 +31,3 @@ class ObservedCone:
     x: float
     y: float
     cone_type: ConeTypes
-    cone_id: int

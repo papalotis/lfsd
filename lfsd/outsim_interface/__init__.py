@@ -6,26 +6,22 @@ Interact with live data coming from LFS outsim and outgauge ports, as well as in
 from __future__ import annotations
 
 import asyncio as aio
-import socket
 import struct
+import sys
 from asyncio.streams import StreamReader, StreamWriter
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 from time import time
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
+from typing import Any, AsyncIterator, List, Tuple
 
 import asyncio_dgram
 import numpy as np
-import rclpy
-from asyncio_dgram.aio import DatagramServer
+from asyncio_dgram.aio import DatagramClient, DatagramServer
 
-from lfsd.common import (  # pylint: disable=unused-import
-    get_lfs_cfg_txt_path,
-    get_machine_ip_address,
-    is_wsl2,
-)
+from lfsd.common import get_lfs_cfg_txt_path, get_machine_ip_address, is_wsl2
 from lfsd.lyt_interface import LYTInterface
+from lfsd.lyt_interface.detection_model import DetectionModel
 from lfsd.outsim_interface.functional import ProcessedOutsimData, process_outsim_data
 from lfsd.outsim_interface.insim_utils import (
     create_insim_initialization_packet,
@@ -45,7 +41,7 @@ class LFSData:
     Represents the data that has been extracted out of the LFS sim and that now can be
     used for other applications
     """
-
+    timestamp: float
     delta_t: float
     raw_outsim_data: RawOutsimData
     raw_outgauge_data: RawOutgaugeData
@@ -62,9 +58,8 @@ class OutsimInterface:
         vjoy_port: int,
         insim_port: int,
         lfs_path: str,
-        sight_range: float,
-        sight_angle: float,
         game_address: str,
+        detection_model: DetectionModel,
     ) -> None:
         """
         Constructor for the outsim interface.
@@ -73,9 +68,8 @@ class OutsimInterface:
             vjoy_port: The port that the vjoy interface is listening on.
             insim_port: The port that the insim interface is sending data to.
             lfs_path: The path to the directory where LFS is installed.
-            sight_range: The range of the sensor sight.
-            sight_angle: The fov angle of the sensor sight.
             game_address: The address of the machine in which LFS is running.
+            detection_model: The detection model to use for detecting cones.
         """
         self.outsim_port: int
         self.outsim_asocket: DatagramServer
@@ -83,7 +77,7 @@ class OutsimInterface:
         self.outgauge_asocket: DatagramServer
 
         self.vjoy_port = vjoy_port
-        self.vjoy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.vjoy_asocket: DatagramClient
 
         self.insim_port = insim_port
         self.game_address = game_address
@@ -95,9 +89,7 @@ class OutsimInterface:
         assert self.lyt_path.is_dir(), self.lyt_path
         self.active_layout_name: str | None = None
 
-        self.sight_range = sight_range
-        self.sight_angle = sight_angle
-
+        self.__detection_model = detection_model
         self.lyt_interface: LYTInterface | None = None
 
         self.check_lfs_cfg_and_load_ports()
@@ -168,12 +160,13 @@ class OutsimInterface:
         if is_wsl2():
             wsl2_machine_ip = get_machine_ip_address()
             if outsim_send_ip != wsl2_machine_ip:
-                rclpy.logwarn(
+                print(
                     "It looks like you are running on WSL2. You need to set the outsim"
                     " and outgauge IP addresses (%s) to the same as the WSL2 IP address (%s): %s",
                     outsim_send_ip,
                     wsl2_machine_ip,
                     get_lfs_cfg_txt_path(),
+                    file=sys.stderr,
                 )
 
         self.outsim_port = outsim_port
@@ -187,12 +180,11 @@ class OutsimInterface:
             return
 
         layout_file_path = (self.lyt_path / self.active_layout_name).with_suffix(".lyt")
-        # print(f"Loading LYT file: {layout_file_path}", flush=True)
+        print(f"Loading LYT file: {layout_file_path}", flush=True)
         assert layout_file_path.is_file(), layout_file_path
         self.lyt_interface = LYTInterface(
             lyt_path=layout_file_path,
-            sight_range=self.sight_range,
-            sight_angle=self.sight_angle,
+            detection_model=self.__detection_model,
         )
         # print("LYT file loaded.")
 
@@ -207,6 +199,10 @@ class OutsimInterface:
         )
         self.outgauge_asocket = await asyncio_dgram.bind(  # type: ignore
             ("0.0.0.0", self.outgauge_port)
+        )
+
+        self.vjoy_asocket = await asyncio_dgram.connect(
+            (self.game_address, self.vjoy_port)
         )
 
         # wait until a layout file is loaded
@@ -241,7 +237,6 @@ class OutsimInterface:
 
         for connection_attempt in count(start=1):
             try:
-                print(self.game_address)
                 reader, writer = await aio.open_connection(
                     self.game_address, self.insim_port
                 )
@@ -360,13 +355,13 @@ class OutsimInterface:
             (outsim_bytes, _), (outgauge_bytes, _) = await aio.gather(
                 self.outsim_asocket.recv(), self.outgauge_asocket.recv()
             )
+            time_after = time()
+            delta_t = time_after - time_before
 
             raw_outsim_data = decode_full_outsim_packet(outsim_bytes)
 
             raw_outgauge_data = decode_outgauge_data(outgauge_bytes)
 
-            time_after = time()
-            delta_t = time_after - time_before
 
             # in case the simulation is paused we don't want to
             # use the real world delta_t, instead we get the average
@@ -389,6 +384,7 @@ class OutsimInterface:
             )
 
             data = LFSData(
+                timestamp=time_after,
                 delta_t=delta_t,
                 raw_outsim_data=raw_outsim_data,
                 processed_outsim_data=processed_outsim_data,
@@ -397,7 +393,7 @@ class OutsimInterface:
 
             yield data
 
-    def send_outputs(
+    async def send_outputs(
         self,
         steering_percentage: float,
         throttle_percentage: float,
@@ -426,7 +422,10 @@ class OutsimInterface:
             clutch_percentage,
             gear_delta,
         )
-        self.vjoy_socket.sendto(packet, (self.game_address, self.vjoy_port))
+
+        await self.vjoy_asocket.send(packet)
+
+        # self.vjoy_socket.sendto(packet, (self.game_address, self.vjoy_port))
 
     @classmethod
     def create_default_kwargs(cls, **update_kwargs: Any) -> dict[str, Any]:

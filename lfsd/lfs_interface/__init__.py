@@ -4,12 +4,16 @@
 The main interface to LFS
 """
 import asyncio
+import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Coroutine
 
-import numpy as np
-
-from lfsd.common import is_wsl2, get_wsl2_host_ip_address
-
+from lfsd.common import get_wsl2_host_ip_address, is_wsl2
+from lfsd.lyt_interface.detection_model import (
+    BasicConicalDetectionModel,
+    DetectionModel,
+)
 from lfsd.outsim_interface import LFSData, OutsimInterface
 
 
@@ -18,11 +22,9 @@ class LFSInterface(ABC):
         self,
         lfs_installation_path: str = "/mnt/c/LFS",
         insim_port: int = 29999,
-        detection_range: float = 20.0,
-        detection_angle: float = 90.0,
-        virtual_joystick_port: int | None = None,
-        virtual_joystick_address: str | None = None,
+        virtual_joystick_port: int = 30002,
         lfs_computer_ip: str | None = None,
+        detection_model: DetectionModel | None = None,
     ) -> None:
         """
         The interface to LFS.
@@ -30,45 +32,45 @@ class LFSInterface(ABC):
         Args:
             lfs_installation_path: The path to where LFS is installed
             insim_port: The port to which insim is bound
-            detection_range: The range of the cone detection
-            detection_angle: The angle of the cone detection
             virtual_joystick_port: The port to send driving commands to
-            virtual_joystick_address: The address to send driving commands to
+            lfs_computer_ip: The IP address of the computer running LFS. If None, it will try to find it automatically (currently only works for WSL2). Otherwise, if not specified, it will use `127.0.0.1`.
+            detection_model: The detection model to use. If not specified a simple conical detection model is used, with detection range 20m and detection angle 90 degrees.
         """
 
-        detection_angle_rad = np.deg2rad(detection_angle)
+        if detection_model is None:
+            detection_model = BasicConicalDetectionModel(
+                detection_range=20.0, detection_angle=90.0
+            )
 
         if lfs_computer_ip is None:
-            lfs_computer_ip = self.get_lfs_computer_ip_if_possible()
+            lfs_computer_ip = self.__get_lfs_computer_ip_if_possible()
 
         self.__outsim_interface = OutsimInterface(
             vjoy_port=virtual_joystick_port,
             insim_port=insim_port,
             lfs_path=lfs_installation_path,
-            sight_range=detection_range,
-            sight_angle=detection_angle_rad,
             game_address=lfs_computer_ip,
+            detection_model=detection_model,
         )
 
-    def get_lfs_computer_ip_if_possible(self) -> str:
-        if is_wsl2():
-            return get_wsl2_host_ip_address()
-        
-        raise NotImplementedError("TODO: Implement this for non-WSL2")
-        
+        self.__windows_process: subprocess.Popen | None = None
 
     @abstractmethod
     async def on_lfs_data(self, data: LFSData) -> None:
         """
-        Called when new data is received from LFS.
+        Called when new data is received from LFS. This is the method a subclass should override to get the data from LFS and do something with it.
 
         Args:
             data: The data received from LFS
         """
-        pass
 
-    def send_driving_command(
-        self, steering: float, throttle: float, brake: float
+    async def send_driving_command(
+        self,
+        steering: float,
+        throttle: float,
+        brake: float,
+        clutch: float = 0.0,
+        gear_delta: int = 0,
     ) -> None:
         """
         Sends a driving command to LFS.
@@ -77,16 +79,63 @@ class LFSInterface(ABC):
             steering: The steering value (between -1 (left), 0 (straight), 1 (right))
             throttle: The throttle value (between 0 (no throttle) and 1 (full throttle))
             brake: The brake value (between 0 (no brake) and 1 (full brake))
+            clutch: The clutch value (between 0 (no clutch) and 1 (full clutch)). Defaults to 0.0.
+            gear_delta: The gear delta (between -1 (downshift) and 1 (upshift)). Defaults to 0.
         """
-        self.__outsim_interface.send_driving_command(steering, throttle, brake)
+        await self.__outsim_interface.send_outputs(
+            steering, throttle, brake, clutch, gear_delta
+        )
+
+    def __get_lfs_computer_ip_if_possible(self) -> str:
+        if is_wsl2():
+            return get_wsl2_host_ip_address()
+
+        return "127.0.0.1"
+
+    def __start_running_windows_script_in_background(self) -> None:
+        """
+        Starts the script that runs LFS in the background
+        """
+        script_path = Path(__file__).absolute().parent.parent / "lfs_windows_output.py"
+        self.__windows_process = subprocess.Popen(
+            [
+                "powershell.exe",
+                "python",
+                str(script_path),
+                str(self.__outsim_interface.vjoy_port),
+            ],
+            # write output to file
+            stdout=open("lfs_windows_output.log", "w"),
+            stderr=subprocess.STDOUT,
+        )
+
+    async def __loop_outsim(self) -> None:
+        async with self.__outsim_interface:
+            async for data in self.__outsim_interface:
+                await self.on_lfs_data(data)
+
+    def additional_spinners(self) -> list[Coroutine[Any, Any, Any]]:
+        """
+        Return a list of coroutines that should be run in the background, in addition to the outsim and insim spinners.
+        """
+        # by default, no additional spinners, subclasses can override this
+        return []
 
     def spin(self) -> None:
-        async def loop_outsim() -> None:
-            async with self.__outsim_interface:
-                async for data in self.__outsim_interface:
-                    await self.on_lfs_data(data)
+        try:
+            extra_spinners = self.additional_spinners()
+            print(f"no of extra spinners: {len(extra_spinners)}")
+            self.__start_running_windows_script_in_background()
+            awaitable = asyncio.gather(
+                self.__loop_outsim(),
+                self.__outsim_interface.spin_insim(),
+                *extra_spinners,
+            )
 
-        awaitable = asyncio.gather(loop_outsim(), self.__outsim_interface.spin_insim())
-
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(awaitable)
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(awaitable)
+        except KeyboardInterrupt:
+            if self.__windows_process is not None:
+                # gently ask the process to stop
+                self.__windows_process.terminate()
+            raise

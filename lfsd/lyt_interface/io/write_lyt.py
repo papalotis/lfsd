@@ -9,18 +9,17 @@ Given the cones of a track write a lyt file that can be used in LFS
 from typing import cast
 
 import numpy as np
-
-from lfsd.lyt_interface.cone_observation import ConeTypes
-from lfsd.math_utils import angle_from_2d_vector
 from typing_extensions import Literal
 
 from lfsd.common_types import FloatArray
+from lfsd.lyt_interface.cone_observation import ConeTypes
 from lfsd.lyt_interface.io.common import (
     BLOCK_STRUCT,
     HEADER_STRUCT,
     ConeTypeToLytObjectIndex,
     get_lfs_layout_path,
 )
+from lfsd.math_utils import angle_from_2d_vector
 
 
 def _to_lyt_heading(heading: float, input_is_radians: bool) -> np.ndarray:
