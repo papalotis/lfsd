@@ -93,7 +93,6 @@ def main() -> None:
                     print("waiting for data")
                     data = sock.recv(64)
                 except socket.timeout:
-                    print("timeout")
                     import time
                     time.sleep(0.1)
                     continue
@@ -102,7 +101,6 @@ def main() -> None:
                     break
 
                 steering, throttle, brake, clutch, gear_delta = decode_packet(data)
-                
 
                 steering_axis_val = map_to_axis(steering, -1, 1)
                 throttle_axis_val = map_to_axis(throttle, 0, 1)

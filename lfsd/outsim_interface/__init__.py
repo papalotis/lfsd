@@ -202,7 +202,9 @@ class OutsimInterface:
             ("0.0.0.0", self.outgauge_port)
         )
 
-        print(f"connecting to vjoy: address: {self.game_address}, port: {self.vjoy_port}")
+        print(
+            f"connecting to vjoy: address: {self.game_address}, port: {self.vjoy_port}"
+        )
         self.vjoy_asocket = await asyncio_dgram.connect(
             (self.game_address, self.vjoy_port)
         )
@@ -423,7 +425,7 @@ class OutsimInterface:
             clutch_percentage,
             gear_delta,
         )
-        print(f'sending packet: {packet}')
+        print(f"sending packet: {packet}")
         await self.vjoy_asocket.send(packet)
 
         # self.vjoy_socket.sendto(packet, (self.game_address, self.vjoy_port))

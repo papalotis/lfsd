@@ -4,6 +4,7 @@
 The main interface to LFS
 """
 import asyncio
+import platform
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -20,7 +21,7 @@ from lfsd.outsim_interface import LFSData, OutsimInterface
 class LFSInterface(ABC):
     def __init__(
         self,
-        lfs_installation_path: str = "/mnt/c/LFS",
+        lfs_installation_path: str | None = None,
         insim_port: int = 29999,
         virtual_joystick_port: int = 30002,
         lfs_computer_ip: str | None = None,
@@ -30,20 +31,23 @@ class LFSInterface(ABC):
         The interface to LFS.
 
         Args:
-            lfs_installation_path: The path to where LFS is installed
+            lfs_installation_path: The path to where LFS is installed. If not specified, it will use `C:\LFS` on Windows and `/mnt/c/LFS` on WSL2.
             insim_port: The port to which insim is bound
             virtual_joystick_port: The port to send driving commands to
             lfs_computer_ip: The IP address of the computer running LFS. If None, it will try to find it automatically (currently only works for WSL2). Otherwise, if not specified, it will use `127.0.0.1`.
-            detection_model: The detection model to use. If not specified a simple conical detection model is used, with detection range 20m and detection angle 90 degrees.
+            detection_model: The detection model to use. If not specified, it will use a detection model with practically infinite range and angle.
         """
 
         if detection_model is None:
             detection_model = BasicConicalDetectionModel(
-                detection_range=20.0, detection_angle=90.0
+                detection_range=10000.0, detection_angle=360.0
             )
 
         if lfs_computer_ip is None:
             lfs_computer_ip = self.__get_lfs_computer_ip_if_possible()
+
+        if lfs_installation_path is None:
+            lfs_installation_path = self.__get_default_lfs_installation_path()
 
         self.__outsim_interface = OutsimInterface(
             vjoy_port=virtual_joystick_port,
@@ -91,6 +95,17 @@ class LFSInterface(ABC):
             return get_wsl2_host_ip_address()
 
         return "127.0.0.1"
+
+    def __get_default_lfs_installation_path(self) -> str:
+        # if windows
+        if platform.system() == "Windows":
+            return "C:\LFS"
+        # if wsl2
+        if is_wsl2():
+            return "/mnt/c/LFS"
+
+        # cannot handle other cases
+        raise ValueError("Could not find default LFS installation path")
 
     def __start_running_windows_script_in_background(self) -> None:
         """
