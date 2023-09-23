@@ -41,6 +41,7 @@ class LFSData:
     Represents the data that has been extracted out of the LFS sim and that now can be
     used for other applications
     """
+
     timestamp: float
     delta_t: float
     raw_outsim_data: RawOutsimData
@@ -201,6 +202,7 @@ class OutsimInterface:
             ("0.0.0.0", self.outgauge_port)
         )
 
+        print(f"connecting to vjoy: address: {self.game_address}, port: {self.vjoy_port}")
         self.vjoy_asocket = await asyncio_dgram.connect(
             (self.game_address, self.vjoy_port)
         )
@@ -362,7 +364,6 @@ class OutsimInterface:
 
             raw_outgauge_data = decode_outgauge_data(outgauge_bytes)
 
-
             # in case the simulation is paused we don't want to
             # use the real world delta_t, instead we get the average
             # of the last few runs, since delta_t has a very low variance (it is
@@ -422,7 +423,7 @@ class OutsimInterface:
             clutch_percentage,
             gear_delta,
         )
-
+        print(f'sending packet: {packet}')
         await self.vjoy_asocket.send(packet)
 
         # self.vjoy_socket.sendto(packet, (self.game_address, self.vjoy_port))

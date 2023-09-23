@@ -16,6 +16,7 @@ dependencies = [
     'uvloop ; platform_system != "Windows"',
     # pyvjoy but only on windows
     'pyvjoy ; platform_system == "Windows"',
+    "typer",
 ]
 
 [project.optional-dependencies]

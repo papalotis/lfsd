@@ -13,6 +13,7 @@ if platform.system() != "Windows":
     except ImportError:
         print('You can improve performance by installing "uvloop"')
     else:
+        pass
         uvloop.install()
 
 __version__ = "0.1.0"

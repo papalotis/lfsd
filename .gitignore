@@ -166,3 +166,7 @@ cython_debug/
 t.py
 
 *.pickle
+
+*.pkl
+
+t.ipynb

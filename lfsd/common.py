@@ -4,6 +4,7 @@
 Common functionality for the whole LFSD package
 """
 import json
+import platform
 from pathlib import Path
 from subprocess import check_output
 
@@ -56,11 +57,17 @@ def get_wsl2_host_ip_address() -> str:
     text = Path("/etc/resolv.conf").read_text()
     nameserver, ip_address = text.splitlines()[-1].split()
     assert nameserver == "nameserver"
+    print("IP address of the host machine is", ip_address)
     return ip_address
 
 
 def is_wsl2() -> bool:
     "Indicates whether the current machine is a WSL2 machine"
+
+    # no need to check for wsl2 explicitly when not on Linux
+    if platform.system() != "Linux":
+        return False
+
     return b"WSL2" in check_output(["uname", "-r"])
 
 

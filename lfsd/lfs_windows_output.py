@@ -77,20 +77,32 @@ def main() -> None:
     else:
         joystick_socket = JOYSTICK_SOCKET
 
+    import os
+
+    print(os.getpid())
     try:
         j = pyvjoy.VJoyDevice(1)
 
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind(("0.0.0.0", joystick_socket))
+            sock.settimeout(1.0)
 
             for _ in count():
                 # Receive data.
-                data = sock.recv(64)
+                try:
+                    print("waiting for data")
+                    data = sock.recv(64)
+                except socket.timeout:
+                    print("timeout")
+                    import time
+                    time.sleep(0.1)
+                    continue
 
                 if not data:
                     break
 
                 steering, throttle, brake, clutch, gear_delta = decode_packet(data)
+                
 
                 steering_axis_val = map_to_axis(steering, -1, 1)
                 throttle_axis_val = map_to_axis(throttle, 0, 1)
