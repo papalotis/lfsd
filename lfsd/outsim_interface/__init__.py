@@ -162,11 +162,8 @@ class OutsimInterface:
             wsl2_machine_ip = get_machine_ip_address()
             if outsim_send_ip != wsl2_machine_ip:
                 print(
-                    "It looks like you are running on WSL2. You need to set the outsim"
-                    " and outgauge IP addresses (%s) to the same as the WSL2 IP address (%s): %s",
-                    outsim_send_ip,
-                    wsl2_machine_ip,
-                    get_lfs_cfg_txt_path(),
+                    f"It looks like you are running on WSL2. You need to set the outsim"
+                    f" and outgauge IP addresses ({outsim_send_ip}) to the same as the WSL2 IP address ({wsl2_machine_ip}): {get_lfs_cfg_txt_path()}",
                     file=sys.stderr,
                 )
 

@@ -1,6 +1,5 @@
 """An Live for Speed interface for Formula Student Driverless"""
 
-# import uvloop only when not running on Windows
 import platform
 
 from lfsd.lfs_interface import LFSInterface
@@ -8,6 +7,7 @@ from lfsd.lyt_interface.cone_observation import ConeTypes, ObservedCone
 from lfsd.outsim_interface import LFSData
 
 if platform.system() != "Windows":
+    # import uvloop only when not running on Windows
     try:
         import uvloop
     except ImportError:
