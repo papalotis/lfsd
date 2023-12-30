@@ -422,7 +422,6 @@ class OutsimInterface:
             clutch_percentage,
             gear_delta,
         )
-        print(f"sending packet: {packet}")
         await self.vjoy_asocket.send(packet)
 
         # self.vjoy_socket.sendto(packet, (self.game_address, self.vjoy_port))
