@@ -293,6 +293,7 @@ class RawOutgaugeData:
     time: int
     car: str
     gear: int
+    player_id: int
     speed: MetersPerSecond
     rpm: float  # rpm
     turbo_pressure: Bar  # bar
@@ -313,6 +314,7 @@ def decode_outgauge_data(data: bytes) -> RawOutgaugeData:
         time=outgauge_pack[0],
         car=car,
         gear=outgauge_pack[3],
+        player_id=outgauge_pack[4],
         speed=outgauge_pack[5],
         rpm=outgauge_pack[6],
         turbo_pressure=outgauge_pack[7],
