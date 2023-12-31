@@ -6,6 +6,7 @@ Interact with live data coming from LFS outsim and outgauge ports, as well as in
 from __future__ import annotations
 
 import asyncio as aio
+import os
 import struct
 import sys
 from asyncio.streams import StreamReader, StreamWriter
@@ -79,6 +80,9 @@ class OutsimInterface:
 
         self.vjoy_port = vjoy_port
         self.vjoy_asocket: DatagramClient
+
+        self._insim_reader: StreamReader | None = None
+        self._insim_writer: StreamWriter | None = None
 
         self.insim_port = insim_port
         self.game_address = game_address
@@ -238,7 +242,7 @@ class OutsimInterface:
 
         for connection_attempt in count(start=1):
             try:
-                reader, writer = await aio.open_connection(
+                self._insim_reader, self._insim_writer = await aio.open_connection(
                     self.game_address, self.insim_port
                 )
             except ConnectionRefusedError:
@@ -254,21 +258,27 @@ class OutsimInterface:
             else:
                 break
 
+        assert self._insim_reader is not None
+        assert self._insim_writer is not None
         print("Connection to insim was successful.", flush=True)
 
         # send initialization packet
-        initialization_packet = create_insim_initialization_packet("lfsd", "")
-        writer.write(initialization_packet)
-        await writer.drain()
+        # get pid to distinguish between different instances of interface
+        current_pid = os.getpid()
+        initialization_packet = create_insim_initialization_packet(
+            f"lfsd-{current_pid}", ""
+        )
+        self._insim_writer.write(initialization_packet)
+        await self._insim_writer.drain()
 
         # send packet requesting the name of the active layout
         buffer_to_send_for_axi_request = bytes([4, 3, 1, 20])
-        writer.write(buffer_to_send_for_axi_request)
-        await writer.drain()
+        self._insim_writer.write(buffer_to_send_for_axi_request)
+        await self._insim_writer.drain()
 
         new_buffer = b""
 
-        return reader, writer, new_buffer
+        return self._insim_reader, self._insim_writer, new_buffer
 
     def handle_insim_buffer(self, buffer: bytes, writer: StreamWriter) -> bytes:
         """
