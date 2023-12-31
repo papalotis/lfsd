@@ -2,23 +2,29 @@
 # -*- coding:utf-8 -*-
 """
 Description: Provides functions for decoding insim packets (see
-https://en.lfsmanual.net/wiki/InSim.txt). We need an insim connection in order to
-know the current track layout loaded.
+https://en.lfsmanual.net/wiki/InSim.txt).
 
-Project: FaSTTUBe Driverless Simulation
+// char			1-byte character
+// byte			1-byte unsigned integer
+// word			2-byte unsigned integer
+// short		2-byte signed integer
+// unsigned		4-byte unsigned integer
+// int			4-byte signed integer
+// float		4-byte float
 """
 
 import struct
-from typing import Optional, Tuple
 
+from lfsd.lyt_interface.io.write_lyt import _to_lyt_heading
+import math
 
 def create_insim_initialization_packet(program_name: str, password: str) -> bytes:
     """
     Create the initialization packet for insim.
 
     Args:
-        program_name (str): The name of the program (see insim docs).
-        password (str): The insim password (see insim docs).
+        program_name: The name of the program (see insim docs).
+        password: The insim password (see insim docs).
 
     Returns:
         bytes: The encoded packet.
@@ -39,6 +45,114 @@ def create_insim_initialization_packet(program_name: str, password: str) -> byte
     )
 
     return isi
+
+
+def create_teleport_command_packet(
+    x: float, y: float, yaw: float, player_id: int
+) -> bytes:
+    """
+    // JOIN REQUEST - allows external program to decide if a player can join
+    // ============
+
+    // Set the ISF_REQ_JOIN flag in the IS_ISI to receive join requests
+    // A join request is seen as an IS_NPL packet with ZERO in the NumP field
+    // An immediate response (e.g. within 1 second) is required using an IS_JRR packet
+
+    // In this case, PLID must be zero and JRRAction must be JRR_REJECT or JRR_SPAWN
+    // If you allow the join and it is successful you will then get a normal IS_NPL with NumP set
+    // You can also specify the start position of the car using the StartPos structure
+
+    // IS_JRR can also be used to move an existing car to a different location
+    // In this case, PLID must be set, JRRAction must be JRR_RESET or higher and StartPos must be set
+
+    struct IS_JRR // Join Request Reply - send one of these back to LFS in response to a join request
+    {
+        byte	Size;		// 16
+        byte	Type;		// ISP_JRR
+        byte	ReqI;		// 0
+        byte	PLID;		// ZERO when this is a reply to a join request - SET to move a car
+
+        byte	UCID;		// set when this is a reply to a join request - ignored when moving a car
+        byte	JRRAction;	// 1 - allow / 0 - reject (should send message to user)
+        byte	Sp2;
+        byte	Sp3;
+
+        ObjectInfo	StartPos; // 0: use default start point / Flags = 0x80: set start point
+    };
+
+    // To use default start point, StartPos should be filled with zero values
+
+    // To specify a start point, StartPos X, Y, Zbyte and Heading should be filled like an autocross
+    // start position, Flags should be 0x80 and Index should be zero
+
+    // Values for JRRAction byte
+
+    enum
+    {
+        JRR_REJECT,
+        JRR_SPAWN,
+        JRR_2,
+        JRR_3,
+        JRR_RESET,
+        JRR_RESET_NO_REPAIR,
+        JRR_6,
+        JRR_7,
+    };
+
+
+    struct ObjectInfo // Info about a single object - explained in the layout file format
+    {
+        short	X;
+        short	Y;
+
+        byte	Zbyte;
+        byte	Flags;
+        byte	Index;
+        byte	Heading;
+    };
+    """
+    ISP_JRR = 58
+    JRR_RESET = 4
+
+    size = 16
+    type = ISP_JRR
+    reqi = 0
+
+    # this will basically always be 1 ,but since we get the info from outgauge we can use it
+    plid = player_id
+    ucid = 0  # don't care
+    jrr_action = JRR_RESET
+    sp2 = 0  # don't care
+    sp3 = 0
+
+    # check https://www.lfs.net/programmer/lyt
+    x = int(x * 16)
+    y = int(y * 16)
+    zbyte = 240
+
+    flags = 0x80
+    index = 0
+
+    # we divide by 2 because in lfs the heading is 0 when the car is facing the positive y axis (the heading points to the right of the car)
+    heading = _to_lyt_heading(yaw - math.pi / 2, input_is_radians=True).item()
+
+    return struct.pack(
+        "BBBBBBBBhhBBBB",
+        size,
+        type,
+        reqi,
+        plid,
+        ucid,
+        jrr_action,
+        sp2,
+        sp3,
+        x,
+        y,
+        zbyte,
+        flags,
+        index,
+        heading,
+    )
 
 
 def handle_insim_packet(packet: bytes) -> tuple[bytes | None, str | None]:

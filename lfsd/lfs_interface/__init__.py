@@ -90,6 +90,23 @@ class LFSInterface(ABC):
             steering, throttle, brake, clutch, gear_delta
         )
 
+    async def teleport_car(
+        self, x: float, y: float, yaw: float, player_id: int | LFSData
+    ) -> None:
+        """
+        Teleports the car to the specified position.
+
+        Args:
+            x: The x coordinate of the car
+            y: The y coordinate of the car
+            yaw: The yaw of the car
+            player_id: The player ID of the car. If you don't know what this is, you probably want to use `1`. You can also pass in the `LFSData` object and it will use the player ID from there.
+        """
+        if isinstance(player_id, LFSData):
+            player_id = player_id.raw_outgauge_data.player_id
+
+        await self.__outsim_interface.teleport_car_to_location(x, y, yaw, player_id)
+
     def __get_lfs_computer_ip_if_possible(self) -> str:
         if is_wsl2():
             return get_wsl2_host_ip_address()

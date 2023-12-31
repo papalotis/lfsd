@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator, List, Tuple
 import asyncio_dgram
 import numpy as np
 from asyncio_dgram.aio import DatagramClient, DatagramServer
+from typing_extensions import Self
 
 from lfsd.common import get_lfs_cfg_txt_path, get_machine_ip_address, is_wsl2
 from lfsd.lyt_interface import LYTInterface
@@ -26,6 +27,7 @@ from lfsd.lyt_interface.detection_model import DetectionModel
 from lfsd.outsim_interface.functional import ProcessedOutsimData, process_outsim_data
 from lfsd.outsim_interface.insim_utils import (
     create_insim_initialization_packet,
+    create_teleport_command_packet,
     handle_insim_packet,
 )
 from lfsd.outsim_interface.outsim_utils import (
@@ -190,7 +192,7 @@ class OutsimInterface:
         )
         # print("LYT file loaded.")
 
-    async def __aenter__(self) -> OutsimInterface:
+    async def __aenter__(self) -> Self:
         """Connect to outsim with udp and wait for the layout to be loaded"""
 
         self.outsim_asocket = await asyncio_dgram.bind(  # type: ignore
@@ -468,3 +470,19 @@ class OutsimInterface:
         outsim_interface_kwargs.update(update_kwargs)
 
         return outsim_interface_kwargs
+
+    async def teleport_car_to_location(
+        self, x: float, y: float, yaw: float, player_id: int
+    ) -> None:
+        """
+        Teleport the car to a specific location.
+
+        Args:
+            x: The x coordinate of the car.
+            y: The y coordinate of the car.
+            yaw: The yaw of the car.
+            player_id: The player id of the car.
+        """
+        teleport_packet = create_teleport_command_packet(x, y, yaw, player_id)
+        self._insim_writer.write(teleport_packet)
+        await self._insim_writer.drain()
