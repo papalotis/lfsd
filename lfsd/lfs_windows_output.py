@@ -94,6 +94,7 @@ def main() -> None:
                     data = sock.recv(64)
                 except socket.timeout:
                     import time
+
                     time.sleep(0.1)
                     continue
 
