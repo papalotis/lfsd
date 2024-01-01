@@ -7,8 +7,9 @@ import asyncio
 import platform
 import subprocess
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Coroutine
+from typing import Any, Coroutine, Iterable
 
 from lfsd.common import get_wsl2_host_ip_address, is_wsl2
 from lfsd.lyt_interface.detection_model import (
@@ -56,6 +57,8 @@ class LFSInterface(ABC):
             game_address=lfs_computer_ip,
             detection_model=detection_model,
         )
+
+        self.__outsim_interface.register_race_start_callback(self.on_race_start)
 
         self.__windows_process: subprocess.Popen | None = None
 
@@ -106,6 +109,45 @@ class LFSInterface(ABC):
             player_id = player_id.raw_outgauge_data.player_id
 
         await self.__outsim_interface.teleport_car_to_location(x, y, yaw, player_id)
+
+    async def toggle_lfs_pause(self) -> None:
+        """
+        Toggle LFS between paused and unpaused state
+        """
+        await self.__outsim_interface.send_press_p_command()
+
+    @property
+    def lfs_is_paused(self) -> bool:
+        """
+        Returns:
+            bool: Whether LFS is paused or not
+        """
+        return self.__outsim_interface.insim_state.lfs_is_paused
+
+    async def pause_lfs(self) -> None:
+        """
+        Pause LFS. If LFS is already paused, this does nothing.
+        """
+        if not self.lfs_is_paused:
+            await self.toggle_lfs_pause()
+
+    async def unpause_lfs(self) -> None:
+        """
+        Unpause LFS. If LFS is already unpaused, this does nothing.
+        """
+        if self.lfs_is_paused:
+            await self.toggle_lfs_pause()
+
+    @asynccontextmanager
+    async def lfs_paused(self) -> Iterable[None]:
+        """
+        Context manager that pauses LFS while inside the context.
+        """
+        await self.pause_lfs()
+        try:
+            yield
+        finally:
+            await self.unpause_lfs()
 
     def __get_lfs_computer_ip_if_possible(self) -> str:
         if is_wsl2():
@@ -171,3 +213,9 @@ class LFSInterface(ABC):
                 # gently ask the process to stop
                 self.__windows_process.terminate()
             raise
+
+    async def on_race_start(self) -> None:
+        """
+        This method runs when a new LFS race starts.
+        """
+        pass

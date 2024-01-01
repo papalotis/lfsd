@@ -13,10 +13,12 @@ https://en.lfsmanual.net/wiki/InSim.txt).
 // float		4-byte float
 """
 
+import math
 import struct
+from dataclasses import dataclass
 
 from lfsd.lyt_interface.io.write_lyt import _to_lyt_heading
-import math
+
 
 def create_insim_initialization_packet(program_name: str, password: str) -> bytes:
     """
@@ -115,7 +117,7 @@ def create_teleport_command_packet(
     JRR_RESET = 4
 
     size = 16
-    type = ISP_JRR
+    type_ = ISP_JRR
     reqi = 0
 
     # this will basically always be 1 ,but since we get the info from outgauge we can use it
@@ -139,7 +141,7 @@ def create_teleport_command_packet(
     return struct.pack(
         "BBBBBBBBhhBBBB",
         size,
-        type,
+        type_,
         reqi,
         plid,
         ucid,
@@ -155,7 +157,156 @@ def create_teleport_command_packet(
     )
 
 
-def handle_insim_packet(packet: bytes) -> tuple[bytes | None, str | None]:
+def create_press_p_command_packet() -> bytes:
+    ISP_MST = 13
+
+    size = 68
+    type_ = ISP_MST
+    reqi = 0
+    zero = 0
+
+    cmd = b"/press p"
+    cmd = cmd.ljust(64, b"\x00")
+
+    packet = struct.pack(
+        "BBBB64s",
+        size,
+        type_,
+        reqi,
+        zero,
+        cmd,
+    )
+
+    return packet
+
+
+from typing_extensions import Self
+
+
+@dataclass
+class InSimState:
+    """
+    // ISS state flags
+
+    #define ISS_GAME			1		// in game (or MPR)
+    #define ISS_REPLAY			2		// in SPR
+    #define ISS_PAUSED			4		// paused
+    #define ISS_SHIFTU			8		// SHIFT+U mode
+    #define ISS_DIALOG			16		// in a dialog
+    #define ISS_SHIFTU_FOLLOW	32		// FOLLOW view
+    #define ISS_SHIFTU_NO_OPT	64		// SHIFT+U buttons hidden
+    #define ISS_SHOW_2D			128		// showing 2d display
+    #define ISS_FRONT_END		256		// entry screen
+    #define ISS_MULTI			512		// multiplayer mode
+    #define ISS_MPSPEEDUP		1024	// multiplayer speedup option
+    #define ISS_WINDOWED		2048	// LFS is running in a window
+    #define ISS_SOUND_MUTE		4096	// sound is switched off
+    #define ISS_VIEW_OVERRIDE	8192	// override user view
+    #define ISS_VISIBLE			16384	// InSim buttons visible
+    #define ISS_TEXT_ENTRY		32768	// in a text entry dialog
+    """
+
+    replay_speed: float
+    flags: int
+    in_game_cam: int
+    view_plid: int
+    num_p: int
+    num_conns: int
+    num_finished: int
+    race_in_prog: int
+    qual_mins: int
+    race_laps: int
+    server_status: int
+    track: str
+    weather: int
+    wind: int
+
+    @property
+    def lfs_is_paused(self) -> bool:
+        return bool(self.flags & 0x4)
+
+    @classmethod
+    def from_bytes(cls, packet: bytes) -> Self:
+        """
+        struct IS_STA // STAte
+        {
+            byte	Size;			// 28
+            byte	Type;			// ISP_STA
+            byte	ReqI;			// ReqI if replying to a request packet
+            byte	Zero;
+
+            float	ReplaySpeed;	// 4-byte float - 1.0 is normal speed
+
+            word	Flags;			// ISS state flags (see below)
+            byte	InGameCam;		// Which type of camera is selected (see below)
+            byte	ViewPLID;		// Unique ID of viewed player (0 = none)
+
+            byte	NumP;			// Number of players in race
+            byte	NumConns;		// Number of connections including host
+            byte	NumFinished;	// Number finished or qualified
+            byte	RaceInProg;		// 0 = no race / 1 = race / 2 = qualifying
+
+            byte	QualMins;
+            byte	RaceLaps;		// see "RaceLaps" near the top of this document
+            byte	Sp2;
+            byte	ServerStatus;	// 0 = unknown / 1 = success / > 1 = fail
+
+            char	Track[6];		// short name for track e.g. FE2R
+            byte	Weather;		// 0,1,2...
+            byte	Wind;			// 0 = off / 1 = weak / 2 = strong
+        };
+        """
+
+        assert (
+            len(packet) == 28
+        ), f"Packet is not the correct length, expected 28, got {len(packet)}"
+        data = struct.unpack(
+            "".join(
+                [
+                    "BBBB",  # Size, Type, ReqI, Zero
+                    "f",  # ReplaySpeed
+                    "HBB",  # Flags, InGameCam, ViewPLID
+                    "BBBB",  # NumP, NumConns, NumFinished, RaceInProg
+                    "BBBB",  # QualMins, RaceLaps, Sp2, ServerStatus
+                    "6sBB",  # Track, Weather, Wind
+                ]
+            ),
+            packet,
+        )
+        assert isinstance(data[16], bytes)
+
+        return InSimState(
+            replay_speed=data[4],
+            flags=data[5],
+            in_game_cam=data[6],
+            view_plid=data[7],
+            num_p=data[8],
+            num_conns=data[9],
+            num_finished=data[10],
+            race_in_prog=data[11],
+            qual_mins=data[12],
+            race_laps=data[13],
+            server_status=data[15],
+            track=data[16].decode(),
+            weather=data[17],
+            wind=data[18],
+        )
+
+
+def create_request_IS_STA_packet() -> bytes:
+    ISP_TINY = 3
+    TINY_SST = 7
+
+    size = 4
+    reqi = 1
+    subt = TINY_SST
+
+    return struct.pack("BBBB", size, ISP_TINY, reqi, subt)
+
+
+def handle_insim_packet(
+    packet: bytes,
+) -> tuple[bytes | None, str | None, InSimState | None, bool]:
     """
     Handle an insim packet. It only handles the minimum number of packets that we
     need. This is not an full insim client.
@@ -163,16 +314,17 @@ def handle_insim_packet(packet: bytes) -> tuple[bytes | None, str | None]:
     Args:
         packet: The packet to handle.
 
-    Returns:
-        The response packet, if it is required. The name of the loaded track, if it is available.
     """
     # Some constants.
     isp_tiny = 3
     isp_axi = 43  # autocross information
     isp_rst = 17  # race start
+    isp_sta = 5  # state
     tiny_none = 0
 
     packet_type = packet[1]
+
+    packet_to_send, name, insim_state, is_race_start = None, None, None, False
 
     # Check the packet type.
     if packet_type == isp_tiny:
@@ -180,13 +332,18 @@ def handle_insim_packet(packet: bytes) -> tuple[bytes | None, str | None]:
         tiny = struct.unpack("BBBB", packet)
         # Check the SubT.
         if tiny[3] == tiny_none:
-            return packet, None
-
+            # this is a keep alive packet we send it back to keep the connection alive
+            packet_to_send = packet
     elif packet_type == isp_axi:
-        name: bytes
-        *_, name = struct.unpack("6BH32s", packet)
-        return None, name.replace(b"\x00", b"").decode()
+        name_raw: bytes
+        *_, name_raw = struct.unpack("6BH32s", packet)
+        name = name_raw.decode().replace("\x00", "")
     elif packet_type == isp_rst:
-        pass
+        is_race_start = True
+    elif packet_type == isp_sta:
+        insim_state = InSimState.from_bytes(packet)
 
-    return None, None
+    if insim_state is not None:
+        print(insim_state.lfs_is_paused)
+
+    return packet_to_send, name, insim_state, is_race_start

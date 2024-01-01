@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 from time import time
-from typing import Any, AsyncIterator, List, Tuple
+from typing import Any, AsyncIterator, Callable, Coroutine, List, Tuple
 
 import asyncio_dgram
 import numpy as np
@@ -26,7 +26,10 @@ from lfsd.lyt_interface import LYTInterface
 from lfsd.lyt_interface.detection_model import DetectionModel
 from lfsd.outsim_interface.functional import ProcessedOutsimData, process_outsim_data
 from lfsd.outsim_interface.insim_utils import (
+    InSimState,
     create_insim_initialization_packet,
+    create_press_p_command_packet,
+    create_request_IS_STA_packet,
     create_teleport_command_packet,
     handle_insim_packet,
 )
@@ -98,6 +101,9 @@ class OutsimInterface:
 
         self.__detection_model = detection_model
         self.lyt_interface: LYTInterface | None = None
+
+        self.insim_state: InSimState | None = None
+        self.race_start_callbacks: list[Callable[[], Coroutine[Any, Any, Any]]] = []
 
         self.check_lfs_cfg_and_load_ports()
 
@@ -190,7 +196,6 @@ class OutsimInterface:
             lyt_path=layout_file_path,
             detection_model=self.__detection_model,
         )
-        # print("LYT file loaded.")
 
     async def __aenter__(self) -> Self:
         """Connect to outsim with udp and wait for the layout to be loaded"""
@@ -223,6 +228,16 @@ class OutsimInterface:
             await aio.sleep(1)
 
         return self
+
+    async def send_message_to_insim(self, packet: bytes) -> None:
+        """
+        Send message to InSim. Raise RuntimeError if insim is not connected.
+        """
+        if self._insim_writer is None:
+            raise RuntimeError("InSim is not connected.")
+
+        self._insim_writer.write(packet)
+        await self._insim_writer.drain()
 
     async def connect_to_insim(
         self, retry_every_n_seconds: int
@@ -270,13 +285,15 @@ class OutsimInterface:
         initialization_packet = create_insim_initialization_packet(
             f"lfsd-{current_pid}", ""
         )
-        self._insim_writer.write(initialization_packet)
-        await self._insim_writer.drain()
+        await self.send_message_to_insim(initialization_packet)
 
         # send packet requesting the name of the active layout
         buffer_to_send_for_axi_request = bytes([4, 3, 1, 20])
-        self._insim_writer.write(buffer_to_send_for_axi_request)
-        await self._insim_writer.drain()
+        await self.send_message_to_insim(buffer_to_send_for_axi_request)
+
+        # send packet requesting the state of the simulation
+        packet_request_is_sta = create_request_IS_STA_packet()
+        await self.send_message_to_insim(packet_request_is_sta)
 
         new_buffer = b""
 
@@ -289,8 +306,7 @@ class OutsimInterface:
 
         Args:
             buffer: The buffer containing incoming insim data.
-            writer: The writer to use for sending data to insim. Mainly needed to
-            send keepalive packets.
+            writer: The writer to use for sending data to insim.
 
         Returns:
             The remaining buffer to be processed, containing incomplete data.
@@ -298,7 +314,7 @@ class OutsimInterface:
         # Loop through each completed packet in the buffer. The first byte of
         # each packet is the packet size, so check that the length of the
         # buffer is at least the size of the first packet.
-        while len(buffer) > 0 and len(buffer) > buffer[0]:
+        while len(buffer) > 0 and len(buffer) >= buffer[0]:
             # Copy the packet from the buffer.
             packet = buffer[: buffer[0]]
 
@@ -306,12 +322,20 @@ class OutsimInterface:
             buffer = buffer[buffer[0] :]
 
             # The packet is now complete! :)
-            to_send, layout = handle_insim_packet(packet)
+            to_send, layout, new_insim_state, is_race_start = handle_insim_packet(
+                packet
+            )
             if to_send is not None:
                 writer.write(to_send)
             if layout is not None and layout != self.active_layout_name:
                 self.active_layout_name = layout
                 self.reload_lyt_interface()
+            if new_insim_state is not None:
+                self.insim_state = new_insim_state
+
+            if is_race_start:
+                for callback in self.race_start_callbacks:
+                    aio.create_task(callback())
 
         return buffer
 
@@ -486,3 +510,16 @@ class OutsimInterface:
         teleport_packet = create_teleport_command_packet(x, y, yaw, player_id)
         self._insim_writer.write(teleport_packet)
         await self._insim_writer.drain()
+
+    async def send_press_p_command(self) -> None:
+        """
+        Send the press p command to LFS.
+        """
+        press_p_packet = create_press_p_command_packet()
+        self._insim_writer.write(press_p_packet)
+        await self._insim_writer.drain()
+
+    def register_race_start_callback(
+        self, func: Callable[[], Callable[[], Coroutine[Any, Any, Any]]]
+    ) -> None:
+        self.race_start_callbacks.append(func)
