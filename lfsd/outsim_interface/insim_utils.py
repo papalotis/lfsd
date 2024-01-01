@@ -343,7 +343,4 @@ def handle_insim_packet(
     elif packet_type == isp_sta:
         insim_state = InSimState.from_bytes(packet)
 
-    if insim_state is not None:
-        print(insim_state.lfs_is_paused)
-
     return packet_to_send, name, insim_state, is_race_start
