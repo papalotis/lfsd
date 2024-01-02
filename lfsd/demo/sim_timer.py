@@ -8,6 +8,14 @@ class TimerLFSInterface(LFSInterface):
         self.register_simulation_timer_callback(self.every_100_ms, 100)
         self.register_simulation_timer_callback(self.every_1000_ms, 1000)
         self.register_simulation_timer_callback(self.every_1_ms, 1)
+        self.register_simulation_timer_callback(self.every_20_s, 20 * 1000)
+
+    async def every_20_s(self) -> None:
+        """
+        Called every 20 s.
+        """
+        print("20 s")
+
 
     async def every_100_ms(self) -> None:
         """
@@ -29,6 +37,7 @@ class TimerLFSInterface(LFSInterface):
 
     async def on_lfs_data(self, data: LFSData) -> None:
         pass
+
 
 if __name__ == "__main__":
     lfs = TimerLFSInterface()

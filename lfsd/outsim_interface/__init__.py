@@ -568,17 +568,18 @@ class OutsimInterface:
         while len(self.simulation_timer_callbacks) > 0:
             func, interval, last_time_called = self.simulation_timer_callbacks.pop()
 
-            should_call_now = (
-                # have not called yet
-                last_time_called == -1
-                # enough time has passed
-                or self._simulation_time - last_time_called > interval
-                # simulation time has wrapped around (i.e. lfs new race start)
-                or self._simulation_time < last_time_called
-            )
+            # the simulation has restarted
+            if self._simulation_time < last_time_called:
+                last_time_called = -1
 
+            should_call_now = (
+                self._simulation_time - last_time_called > interval
+                and last_time_called != -1
+            )
             if should_call_now:
                 aio.create_task(func())
+
+            if should_call_now or last_time_called == -1:
                 last_time_called = self._simulation_time
 
             next_time_callbacks.append((func, interval, last_time_called))
@@ -592,4 +593,3 @@ class OutsimInterface:
         while True:
             await aio.sleep(1 / 200)
             self.run_simulation_timer_callbacks()
-
