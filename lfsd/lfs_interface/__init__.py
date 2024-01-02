@@ -9,7 +9,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Coroutine, Iterable
+from typing import Any, Callable, Coroutine, Iterable
 
 from lfsd.common import get_wsl2_host_ip_address, is_wsl2
 from lfsd.lyt_interface.detection_model import (
@@ -198,11 +198,13 @@ class LFSInterface(ABC):
     def spin(self) -> None:
         try:
             extra_spinners = self.additional_spinners()
-            print(f"no of extra spinners: {len(extra_spinners)}")
+            if len(extra_spinners) > 0:
+                print(f"no of extra spinners: {len(extra_spinners)}")
             self.__start_running_windows_script_in_background()
             awaitable = asyncio.gather(
                 self.__loop_outsim(),
                 self.__outsim_interface.spin_insim(),
+                self.__outsim_interface.spin_sim_time_callbacks(),
                 *extra_spinners,
             )
 
@@ -219,3 +221,26 @@ class LFSInterface(ABC):
         This method runs when a new LFS race starts.
         """
         pass
+
+    @property
+    def simulation_time(self) -> int:
+        """
+        Returns the current simulation time in seconds.
+        """
+        assert self.__outsim_interface is not None, "Outsim interface is not set"
+        return self.__outsim_interface._simulation_time
+
+    def register_simulation_timer_callback(
+        self, callback: Callable[[], Coroutine[Any, Any, Any]], interval: int
+    ) -> None:
+        """
+        Register a timer callback function.
+
+        Args:
+            callback: The callback function to be executed.
+            interval: The interval in milliseconds at which the callback should be called.
+
+        Returns:
+            None
+        """
+        self.__outsim_interface.register_simulation_timer_callback(callback, interval)

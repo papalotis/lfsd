@@ -105,6 +105,15 @@ class OutsimInterface:
         self.insim_state: InSimState | None = None
         self.race_start_callbacks: list[Callable[[], Coroutine[Any, Any, Any]]] = []
 
+        # a list of callbacks that are called every interval milliseconds
+        # each tuple represents a callback, the interval and the last time the callback
+        # was called
+        self.simulation_timer_callbacks: list[
+            tuple[Callable[[], Coroutine[Any, Any, Any]], int, int]
+        ] = []
+
+        self._simulation_time: int | None = None
+
         self.check_lfs_cfg_and_load_ports()
 
     def load_cfg_outsim_outgauge(self) -> dict[str, dict[str, str]]:
@@ -396,6 +405,7 @@ class OutsimInterface:
             delta_t = time_after - time_before
 
             raw_outsim_data = decode_full_outsim_packet(outsim_bytes)
+            self._simulation_time = raw_outsim_data.packet_time
 
             raw_outgauge_data = decode_outgauge_data(outgauge_bytes)
 
@@ -523,3 +533,63 @@ class OutsimInterface:
         self, func: Callable[[], Callable[[], Coroutine[Any, Any, Any]]]
     ) -> None:
         self.race_start_callbacks.append(func)
+
+    def register_simulation_timer_callback(
+        self, func: Callable[[], Coroutine[Any, Any, Any]], interval: int
+    ) -> None:
+        """
+        Register a callback that is every interval milliseconds. The timer that is used is the internal LFS simulation timer. The simulation timer runs with the same frequency as the frame rate of LFS and is at most 100 Hz (even if the frame rate is higher). This info is from 01.01.2024. There are plans to update the LFS engine to run at 1000 Hz, but this is not yet implemented. This means that for now any interval below 10 ms will get called every 10 ms.
+
+        Args:
+            func: The function to call every interval milliseconds.
+            interval: The interval in milliseconds.
+        """
+        assert interval > 0, "The interval must be greater than 0."
+        if interval < 10:
+            print(
+                "WARNING: The interval is below 10 ms. LFS runs at a maximum of 100 Hz, so the callback will be called every 10 ms.",
+                file=sys.stderr,
+            )
+
+        # -1 means the callback has not been called yet
+        self.simulation_timer_callbacks.append((func, interval, -1))
+
+    def run_simulation_timer_callbacks(self) -> None:
+        """
+        Run the simulation timer callbacks.
+        """
+        if self._simulation_time is None:
+            return
+
+        next_time_callbacks: list[
+            tuple[Callable[[], Coroutine[Any, Any, Any]], int, int]
+        ] = []
+
+        while len(self.simulation_timer_callbacks) > 0:
+            func, interval, last_time_called = self.simulation_timer_callbacks.pop()
+
+            should_call_now = (
+                # have not called yet
+                last_time_called == -1
+                # enough time has passed
+                or self._simulation_time - last_time_called > interval
+                # simulation time has wrapped around (i.e. lfs new race start)
+                or self._simulation_time < last_time_called
+            )
+
+            if should_call_now:
+                aio.create_task(func())
+                last_time_called = self._simulation_time
+
+            next_time_callbacks.append((func, interval, last_time_called))
+
+        self.simulation_timer_callbacks.extend(next_time_callbacks)
+
+    async def spin_sim_time_callbacks(self) -> None:
+        """
+        Spin the simulation timer callbacks.
+        """
+        while True:
+            await aio.sleep(1 / 200)
+            self.run_simulation_timer_callbacks()
+
