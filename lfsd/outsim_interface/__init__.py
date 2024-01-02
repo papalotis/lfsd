@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio as aio
 import mmap
 import os
-import pickle
 import struct
 import sys
 from asyncio.streams import StreamReader, StreamWriter
@@ -20,7 +19,7 @@ from typing import Any, AsyncIterator, Callable, Coroutine, List, Tuple
 
 import asyncio_dgram
 import numpy as np
-from asyncio_dgram.aio import DatagramClient, DatagramServer
+from asyncio_dgram.aio import DatagramClient
 from typing_extensions import Self
 
 from lfsd.common import get_propagator_write_path
@@ -30,8 +29,9 @@ from lfsd.outsim_interface.functional import ProcessedOutsimData, process_outsim
 from lfsd.outsim_interface.insim_utils import (
     InSimState,
     create_insim_initialization_packet,
-    create_press_p_command_packet,
+    create_key_press_command_packet,
     create_request_IS_STA_packet,
+    create_say_packet,
     create_teleport_command_packet,
     handle_insim_packet,
 )
@@ -351,6 +351,7 @@ class OutsimInterface:
         outsim_bytes: bytes
         last_timestamp = None
         from icecream import ic
+
         for i in count():
             await aio.sleep(0.004)
             self._mmap.seek(0)
@@ -369,7 +370,7 @@ class OutsimInterface:
                 print(f"Error in data loading. Length of data is {len(data)}")
                 continue
             outsim_bytes = b"LFST" + outsim_bytes
-            outsim_bytes = outsim_bytes[: 272]
+            outsim_bytes = outsim_bytes[:272]
 
             time_after = time()
             delta_t = time_after - time_before
@@ -491,13 +492,22 @@ class OutsimInterface:
         self._insim_writer.write(teleport_packet)
         await self._insim_writer.drain()
 
+    async def send_key_press_command(self, key: str) -> None:
+        """
+        Send '/press `key`' command to LFS.
+        """
+        buffer = create_key_press_command_packet(key)
+        await self.send_message_to_insim(buffer)
+
     async def send_press_p_command(self) -> None:
         """
         Send the press p command to LFS.
         """
-        press_p_packet = create_press_p_command_packet()
-        self._insim_writer.write(press_p_packet)
-        await self._insim_writer.drain()
+        await self.send_key_press_command("p")
+
+    async def send_say_message_command(self, message: str) -> None:
+        buffer = create_say_packet(message)
+        await self.send_message_to_insim(buffer)
 
     def register_race_start_callback(
         self, func: Callable[[], Callable[[], Coroutine[Any, Any, Any]]]

@@ -157,7 +157,7 @@ def create_teleport_command_packet(
     )
 
 
-def create_press_p_command_packet() -> bytes:
+def create_mst_packet(message: str) -> bytes:
     ISP_MST = 13
 
     size = 68
@@ -165,7 +165,7 @@ def create_press_p_command_packet() -> bytes:
     reqi = 0
     zero = 0
 
-    cmd = b"/press p"
+    cmd = message.encode()
     cmd = cmd.ljust(64, b"\x00")
 
     packet = struct.pack(
@@ -178,6 +178,20 @@ def create_press_p_command_packet() -> bytes:
     )
 
     return packet
+
+
+def create_key_press_command_packet(key: str) -> bytes:
+    assert len(key) == 1, "Key must be a single character"
+
+    packet = create_mst_packet(f"/press {key}")
+
+    return packet
+
+
+def create_say_packet(message: str) -> bytes:
+    assert len(message) <= 55, "Message must be at most 55 characters long"
+
+    return create_mst_packet(f"/say {message}")
 
 
 from typing_extensions import Self

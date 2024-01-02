@@ -245,3 +245,6 @@ class LFSInterface(ABC):
             None
         """
         self.__outsim_interface.register_simulation_timer_callback(callback, interval)
+
+    async def send_message_to_local_user(self, message: str) -> None:
+        await self.__outsim_interface.send_say_message_command(message)

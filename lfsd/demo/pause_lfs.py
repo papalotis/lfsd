@@ -20,8 +20,14 @@ class PauseLFSInterface(LFSInterface):
 
     async def on_lfs_data(self, data: LFSData) -> None:
         self.counter += 1
+
+        if self.counter % 100 != 0:
+            return
+
         await self.pause_lfs()
-        await asyncio.sleep(0.1)
+        for i in range(3):
+            await self.send_message_to_local_user(f"Waiting for {3-i} secs")
+            await asyncio.sleep(1.0)
         print(self.counter)
         await self.toggle_lfs_pause()
 
