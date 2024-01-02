@@ -1,3 +1,4 @@
 {
-    "lfs_path": "/mnt/c/LFS"
+    "lfs_path": "/mnt/c/LFS",
+    "propagator_write_path": "/tmp/lfsd/outsim_outgauge_data"
 }

@@ -5,6 +5,7 @@ Common functionality for the whole LFSD package
 """
 import json
 import platform
+from functools import cache
 from pathlib import Path
 from subprocess import check_output
 
@@ -35,6 +36,19 @@ def get_lfs_path() -> Path:
     lfs_path = Path(config["lfs_path"])
     assert lfs_path.is_dir(), f"LFS path is not a directory {lfs_path}."
     return lfs_path
+
+
+@cache
+def get_propagator_write_path() -> Path:
+    """
+    Get the path where the propagator writes its data
+
+    Returns:
+        Path: The path of the file where the propagator writes its data
+    """
+    config = json.loads(get_configuration_file_path().read_text())
+    propagator_write_path = Path(config["propagator_write_path"])
+    return propagator_write_path
 
 
 def get_lfs_cfg_txt_path() -> Path:

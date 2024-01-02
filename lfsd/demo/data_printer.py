@@ -23,8 +23,9 @@ class PrinterLFSInterface(LFSInterface):
             if cone.cone_type == ConeTypes.BLUE
         ]
 
-        print(f"No of yellow cones: {len(yellow_cones)}")
-        print(f"No of blue cones: {len(blue_cones)}")
+        # print(f"No of yellow cones: {len(yellow_cones)}")
+        # print(f"No of blue cones: {len(blue_cones)}")
+        # print(self.simulation_time)
 
         steering = np.sin(time() * np.pi * 2 / 2)
         throttle = 0.5

@@ -203,6 +203,7 @@ class LFSInterface(ABC):
             self.__start_running_windows_script_in_background()
             awaitable = asyncio.gather(
                 self.__loop_outsim(),
+                self.__outsim_interface.spin_outgauge_outsim_propagator_start(),
                 self.__outsim_interface.spin_insim(),
                 self.__outsim_interface.spin_sim_time_callbacks(),
                 *extra_spinners,

@@ -16,7 +16,6 @@ class TimerLFSInterface(LFSInterface):
         """
         print("20 s")
 
-
     async def every_100_ms(self) -> None:
         """
         Called every 100 ms.

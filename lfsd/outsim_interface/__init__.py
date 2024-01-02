@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio as aio
 import os
+import pickle
 import struct
 import sys
 from asyncio.streams import StreamReader, StreamWriter
@@ -21,7 +22,7 @@ import numpy as np
 from asyncio_dgram.aio import DatagramClient, DatagramServer
 from typing_extensions import Self
 
-from lfsd.common import get_lfs_cfg_txt_path, get_machine_ip_address, is_wsl2
+from lfsd.common import get_propagator_write_path
 from lfsd.lyt_interface import LYTInterface
 from lfsd.lyt_interface.detection_model import DetectionModel
 from lfsd.outsim_interface.functional import ProcessedOutsimData, process_outsim_data
@@ -32,6 +33,9 @@ from lfsd.outsim_interface.insim_utils import (
     create_request_IS_STA_packet,
     create_teleport_command_packet,
     handle_insim_packet,
+)
+from lfsd.outsim_interface.outsim_outgauge_data_propagator import (
+    propagator_is_already_running,
 )
 from lfsd.outsim_interface.outsim_utils import (
     RawOutgaugeData,
@@ -78,10 +82,12 @@ class OutsimInterface:
             game_address: The address of the machine in which LFS is running.
             detection_model: The detection model to use for detecting cones.
         """
-        self.outsim_port: int
-        self.outsim_asocket: DatagramServer
-        self.outgauge_port: int
-        self.outgauge_asocket: DatagramServer
+
+        assert vjoy_port > 0, "The vjoy port must be greater than 0."
+        assert insim_port > 0, "The insim port must be greater than 0."
+        assert vjoy_port != insim_port, "The vjoy and insim port must be different."
+
+        # self._outsim_outgauge_propagator_process: aio.subprocess.Process | None = None
 
         self.vjoy_port = vjoy_port
         self.vjoy_asocket: DatagramClient
@@ -114,82 +120,28 @@ class OutsimInterface:
 
         self._simulation_time: int | None = None
 
-        self.check_lfs_cfg_and_load_ports()
+    async def spin_outgauge_outsim_propagator_start(self) -> None:
+        process = None
+        try:
+            while True:
+                await aio.sleep(0.1)
+                if not propagator_is_already_running():
+                    print("Starting propagator...")
+                    path_to_script = (
+                        Path(__file__).parent / "outsim_outgauge_data_propagator.py"
+                    )
 
-    def load_cfg_outsim_outgauge(self) -> dict[str, dict[str, str]]:
-        """
-        Load the LFS configuration file and parse the outsim and outgauge ports. All
-        strings are converted to lowercase.
-        """
-        cfg_path = self.lfs_path / "cfg.txt"
-        assert cfg_path.is_file()
+                    process = await aio.create_subprocess_exec(
+                        "python", path_to_script
 
-        dictionaries: dict[str, dict[str, str]] = {
-            "outsim": {},
-            "outgauge": {},
-        }
-
-        for line in cfg_path.read_text(encoding="utf-8").splitlines():
-            line_lower = line.lower()
-            if line_lower.startswith(("outsim", "outgauge")):
-                channel, setting, value = line_lower.split()
-                dictionaries[channel][setting] = value
-
-        return dictionaries
-
-    def check_lfs_cfg_and_load_ports(self) -> None:
-        """
-        Check if the LFS configuration is correct.
-        """
-
-        configuration_mapping = self.load_cfg_outsim_outgauge()
-        assert (
-            configuration_mapping["outsim"]["mode"] == "1"
-        ), "OutSim mode must be set to 1."
-
-        assert (
-            configuration_mapping["outgauge"]["mode"] == "1"
-        ), "OutGauge mode must be set to 1."
-
-        assert (
-            configuration_mapping["outsim"]["opts"] == "ff"
-        ), 'OutSim opts be set to "ff"'
-
-        outsim_port = int(configuration_mapping["outsim"]["port"])
-        outgauge_port = int(configuration_mapping["outgauge"]["port"])
-
-        all_ports = [outsim_port, outgauge_port, self.insim_port, self.vjoy_port]
-        names = ["outsim", "outgauge", "insim", "vjoy"]
-        all_ports_set = set(all_ports) - set([0])
-
-        ports_string = "\n".join(
-            f"{name}: {port}" for port, name in zip(all_ports, names)
-        )
-
-        assert len(all_ports_set) == len(all_ports), (
-            "All ports must be unique and no port can be set to 0.\n" + ports_string
-        )
-
-        outsim_send_ip = configuration_mapping["outsim"]["ip"]
-        outgauge_send_ip = configuration_mapping["outgauge"]["ip"]
-        if outsim_send_ip != outgauge_send_ip:
-            raise ValueError(
-                "The outsim and outgauge IP addresses must be the same.\n"
-                f"outsim: {outsim_send_ip}\n"
-                f"outgauge: {outgauge_send_ip}"
-            )
-
-        if is_wsl2():
-            wsl2_machine_ip = get_machine_ip_address()
-            if outsim_send_ip != wsl2_machine_ip:
-                print(
-                    f"It looks like you are running on WSL2. You need to set the outsim"
-                    f" and outgauge IP addresses ({outsim_send_ip}) to the same as the WSL2 IP address ({wsl2_machine_ip}): {get_lfs_cfg_txt_path()}",
-                    file=sys.stderr,
-                )
-
-        self.outsim_port = outsim_port
-        self.outgauge_port = outgauge_port
+                    )
+                    # wait until the process is running
+                    await aio.sleep(1.0)
+        finally:
+            if process is not None:
+                print('Terminating propagator...')
+                await aio.sleep(0.1)
+                process.terminate()
 
     def reload_lyt_interface(self) -> None:
         """
@@ -207,17 +159,7 @@ class OutsimInterface:
         )
 
     async def __aenter__(self) -> Self:
-        """Connect to outsim with udp and wait for the layout to be loaded"""
-
-        self.outsim_asocket = await asyncio_dgram.bind(  # type: ignore
-            (
-                "0.0.0.0",
-                self.outsim_port,
-            )
-        )
-        self.outgauge_asocket = await asyncio_dgram.bind(  # type: ignore
-            ("0.0.0.0", self.outgauge_port)
-        )
+        """Connect to insim"""
 
         print(
             f"connecting to vjoy: address: {self.game_address}, port: {self.vjoy_port}"
@@ -374,9 +316,18 @@ class OutsimInterface:
 
     async def __aexit__(self, *args: Any, **kwargs: Any) -> Any:
         """Disconnect from outsim"""
-        self.outsim_asocket.close()
-        self.outgauge_asocket.close()
         return False
+
+    def get_propagator_file_to_use(self) -> Path | None:
+        path_to_monitor = get_propagator_write_path()
+        try:
+            file_to_use = max(
+                path_to_monitor.iterdir(), key=lambda x: x.stat().st_mtime
+            )
+        except ValueError:
+            file_to_use = None
+
+        return file_to_use
 
     async def __aiter__(self) -> AsyncIterator[LFSData]:
         """
@@ -397,11 +348,35 @@ class OutsimInterface:
 
         outsim_bytes: bytes
 
+        file_to_watch = self.get_propagator_file_to_use()
+        if file_to_watch is None:
+            last_time_modified = 0
+        else:
+            last_time_modified = file_to_watch.stat().st_mtime
+
         for i in count():
-            (outsim_bytes, _), (outgauge_bytes, _) = await aio.gather(
-                self.outsim_asocket.recv(), self.outgauge_asocket.recv()
-            )
+            await aio.sleep(0.005)
+
+            file_to_load_from = self.get_propagator_file_to_use()
+
+            if file_to_load_from is None:
+                continue
+
+            if file_to_load_from.stat().st_mtime == last_time_modified:
+                continue
+
             time_after = time()
+
+            data = file_to_load_from.read_bytes()
+            try:
+                outgauge_bytes, outsim_bytes = data.split(b"LFST")
+            except ValueError:
+                print(f'Error in data loading. Length of data is {len(data)}')
+                continue
+            outsim_bytes = b"LFST" + outsim_bytes
+
+            last_time_modified = file_to_load_from.stat().st_mtime
+
             delta_t = time_after - time_before
 
             raw_outsim_data = decode_full_outsim_packet(outsim_bytes)

@@ -17,6 +17,7 @@ dependencies = [
     # pyvjoy but only on windows
     'pyvjoy ; platform_system == "Windows"',
     "typer",
+    "aiofiles",
 ]
 
 [project.optional-dependencies]
