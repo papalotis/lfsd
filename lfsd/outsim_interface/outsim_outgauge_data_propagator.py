@@ -4,6 +4,8 @@ Binds to the Outsim and Outgauge ports and propagates data to other programs tha
 from __future__ import annotations
 
 import asyncio
+import mmap
+import os
 import sys
 import time
 from itertools import count
@@ -31,7 +33,14 @@ class OutsimOutgaugeDataPropagator:
 
         self.check_lfs_cfg_and_load_ports()
 
-        self._propagator_write_path = get_propagator_write_path()
+        self._propagator_write_path = get_propagator_write_path() / "mmap_data"
+        self._propagator_write_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self._opened_file = os.open(
+            str(self._propagator_write_path), os.O_CREAT | os.O_RDWR
+        )
+        os.ftruncate(self._opened_file, 1024)
+        self._mmap = mmap.mmap(self._opened_file, 1024)
 
     async def __aenter__(self) -> OutsimOutgaugeDataPropagator:
         self._outsim_server = await asyncio_dgram.bind(  # type: ignore
@@ -62,15 +71,12 @@ class OutsimOutgaugeDataPropagator:
             outsim_data, _ = await self._outsim_server.recv()
             outgauge_data, _ = await self._outgauge_server.recv()
 
-            # if i % 100 == 0:
-            #     print(f"Received {i} packets.")
+            current_time = int(time.time() * 1000)
+            current_time_bytes = current_time.to_bytes(8, "little")
+            combined = current_time_bytes + outgauge_data + outsim_data + b"ENDOFDATA"
 
-            combined = outgauge_data + outsim_data
-
-            counter = i % 200
-            file_to_write = self._propagator_write_path / f"{counter:03}.pickle"
-            file_to_write.parent.mkdir(parents=True, exist_ok=True)
-            file_to_write.write_bytes(combined)
+            self._mmap.seek(0)
+            self._mmap.write(combined)
 
     def load_cfg_outsim_outgauge(self) -> dict[str, dict[str, str]]:
         """

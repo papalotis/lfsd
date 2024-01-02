@@ -18,6 +18,7 @@ dependencies = [
     'pyvjoy ; platform_system == "Windows"',
     "typer",
     "aiofiles",
+    "icecream",
 ]
 
 [project.optional-dependencies]

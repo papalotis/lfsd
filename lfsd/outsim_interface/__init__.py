@@ -6,6 +6,7 @@ Interact with live data coming from LFS outsim and outgauge ports, as well as in
 from __future__ import annotations
 
 import asyncio as aio
+import mmap
 import os
 import pickle
 import struct
@@ -120,6 +121,11 @@ class OutsimInterface:
 
         self._simulation_time: int | None = None
 
+        self._mmap_path = get_propagator_write_path() / "mmap_data"
+        self._mmap_path.parent.mkdir(parents=True, exist_ok=True)
+        self._mmap_fd = os.open(str(self._mmap_path.absolute()), os.O_RDWR)
+        self._mmap = mmap.mmap(self._mmap_fd, 1024)
+
     async def spin_outgauge_outsim_propagator_start(self) -> None:
         process = None
         try:
@@ -131,15 +137,12 @@ class OutsimInterface:
                         Path(__file__).parent / "outsim_outgauge_data_propagator.py"
                     )
 
-                    process = await aio.create_subprocess_exec(
-                        "python", path_to_script
-
-                    )
+                    process = await aio.create_subprocess_exec("python", path_to_script)
                     # wait until the process is running
                     await aio.sleep(1.0)
         finally:
             if process is not None:
-                print('Terminating propagator...')
+                print("Terminating propagator...")
                 await aio.sleep(0.1)
                 process.terminate()
 
@@ -341,42 +344,34 @@ class OutsimInterface:
             LFSData: The parsed data as a dataclass
         """
         delta_ts: List[float] = []
-
         time_before = time()
 
         previous_angular_velocity = np.array([0, 0, 0])
 
         outsim_bytes: bytes
-
-        file_to_watch = self.get_propagator_file_to_use()
-        if file_to_watch is None:
-            last_time_modified = 0
-        else:
-            last_time_modified = file_to_watch.stat().st_mtime
-
+        last_timestamp = None
+        from icecream import ic
         for i in count():
-            await aio.sleep(0.005)
-
-            file_to_load_from = self.get_propagator_file_to_use()
-
-            if file_to_load_from is None:
+            await aio.sleep(0.004)
+            self._mmap.seek(0)
+            data = self._mmap.read(1024)
+            timestamp = data[:8]
+            assert len(timestamp) == 8
+            if timestamp == last_timestamp:
                 continue
 
-            if file_to_load_from.stat().st_mtime == last_time_modified:
-                continue
+            last_timestamp = timestamp
 
-            time_after = time()
-
-            data = file_to_load_from.read_bytes()
+            rest = data[8:]
             try:
-                outgauge_bytes, outsim_bytes = data.split(b"LFST")
+                outgauge_bytes, outsim_bytes = rest.split(b"LFST")
             except ValueError:
-                print(f'Error in data loading. Length of data is {len(data)}')
+                print(f"Error in data loading. Length of data is {len(data)}")
                 continue
             outsim_bytes = b"LFST" + outsim_bytes
+            outsim_bytes = outsim_bytes[: 272]
 
-            last_time_modified = file_to_load_from.stat().st_mtime
-
+            time_after = time()
             delta_t = time_after - time_before
 
             raw_outsim_data = decode_full_outsim_packet(outsim_bytes)
