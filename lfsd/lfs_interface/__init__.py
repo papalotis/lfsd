@@ -206,6 +206,7 @@ class LFSInterface(ABC):
                 self.__outsim_interface.spin_outgauge_outsim_propagator_start(),
                 self.__outsim_interface.spin_insim(),
                 self.__outsim_interface.spin_sim_time_callbacks(),
+                self.__outsim_interface.spin_check_lfs_is_running(),
                 *extra_spinners,
             )
 
@@ -245,6 +246,20 @@ class LFSInterface(ABC):
             None
         """
         self.__outsim_interface.register_simulation_timer_callback(callback, interval)
+
+    def register_command_callback(
+        self, callback: Callable[[str], Coroutine[Any, Any, Any]]
+    ) -> None:
+        """
+        Register a callback function that is called when a command is received from LFS.
+
+        Args:
+            callback: The callback function to be executed.
+
+        Returns:
+            None
+        """
+        self.__outsim_interface.register_command_callback(callback)
 
     async def send_message_to_local_user(self, message: str) -> None:
         await self.__outsim_interface.send_say_message_command(message)

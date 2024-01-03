@@ -318,9 +318,26 @@ def create_request_IS_STA_packet() -> bytes:
     return struct.pack("BBBB", size, ISP_TINY, reqi, subt)
 
 
+def parse_admin_command_report(packet: bytes) -> str:
+    """
+    Parse an admin command report packet.
+
+    Args:
+        packet: The packet to parse.
+
+    Returns:
+        tuple[str, str]: The name of the player and the message.
+    """
+    ISP_ACR = 55
+
+    msg = packet[-64:].decode().replace("\x00", "").strip()
+
+    return msg
+
+
 def handle_insim_packet(
     packet: bytes,
-) -> tuple[bytes | None, str | None, InSimState | None, bool]:
+) -> tuple[bytes | None, str | None, InSimState | None, bool, str | None]:
     """
     Handle an insim packet. It only handles the minimum number of packets that we
     need. This is not an full insim client.
@@ -329,16 +346,24 @@ def handle_insim_packet(
         packet: The packet to handle.
 
     """
+    # print(packet)
     # Some constants.
     isp_tiny = 3
     isp_axi = 43  # autocross information
     isp_rst = 17  # race start
     isp_sta = 5  # state
+    isp_acr = 55  # admin command report
     tiny_none = 0
 
     packet_type = packet[1]
 
-    packet_to_send, name, insim_state, is_race_start = None, None, None, False
+    packet_to_send, layout_name, insim_state, is_race_start, command = (
+        None,
+        None,
+        None,
+        False,
+        None,
+    )
 
     # Check the packet type.
     if packet_type == isp_tiny:
@@ -351,10 +376,12 @@ def handle_insim_packet(
     elif packet_type == isp_axi:
         name_raw: bytes
         *_, name_raw = struct.unpack("6BH32s", packet)
-        name = name_raw.decode().replace("\x00", "")
+        layout_name = name_raw.decode().replace("\x00", "")
     elif packet_type == isp_rst:
         is_race_start = True
     elif packet_type == isp_sta:
         insim_state = InSimState.from_bytes(packet)
+    elif packet_type == isp_acr:
+        command = parse_admin_command_report(packet)
 
-    return packet_to_send, name, insim_state, is_race_start
+    return packet_to_send, layout_name, insim_state, is_race_start, command

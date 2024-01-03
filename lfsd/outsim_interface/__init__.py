@@ -121,6 +121,8 @@ class OutsimInterface:
 
         self._simulation_time: int | None = None
 
+        self._command_callbacks: list[Callable[[str], Coroutine[Any, Any, Any]]] = []
+
         self._mmap_path = get_propagator_write_path() / "mmap_data"
         self._mmap_path.parent.mkdir(parents=True, exist_ok=True)
         self._mmap_fd = os.open(str(self._mmap_path.absolute()), os.O_RDWR)
@@ -276,9 +278,13 @@ class OutsimInterface:
             buffer = buffer[buffer[0] :]
 
             # The packet is now complete! :)
-            to_send, layout, new_insim_state, is_race_start = handle_insim_packet(
-                packet
-            )
+            (
+                to_send,
+                layout,
+                new_insim_state,
+                is_race_start,
+                command,
+            ) = handle_insim_packet(packet)
             if to_send is not None:
                 writer.write(to_send)
             if layout is not None and layout != self.active_layout_name:
@@ -290,6 +296,10 @@ class OutsimInterface:
             if is_race_start:
                 for callback in self.race_start_callbacks:
                     aio.create_task(callback())
+
+            if command is not None:
+                for callback in self._command_callbacks:
+                    aio.create_task(callback(command))
 
         return buffer
 
@@ -573,3 +583,55 @@ class OutsimInterface:
         while True:
             await aio.sleep(1 / 200)
             self.run_simulation_timer_callbacks()
+
+    async def spin_check_lfs_is_running(self) -> None:
+        # run the tasklist command every 5 seconds and capture the output
+        # if the output contains LFS then we know that LFS is running
+
+        lfs_is_running = False
+
+        while True:
+            process = await aio.create_subprocess_exec(
+                "tasklist.exe", stdout=aio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            stdout = stdout.decode("utf-8")
+
+            tasks = self._parse_tasklist_output(stdout)
+
+            if not any("LFS.exe" == task[0] for task in tasks):
+                lfs_is_running = False
+                print("WARNING: LFS is NOT running.")
+            else:
+                if not lfs_is_running:
+                    print("LFS is running.")
+                    lfs_is_running = True
+            await aio.sleep(5)
+
+    def _parse_tasklist_output(
+        self, tasklist_output: str
+    ) -> list[tuple[str, int, str, int, int]]:
+        """Image Name                     PID Session Name        Session#    Mem Usage
+        ========================= ======== ================ =========== ============
+        System Idle Process              0 Services                   0          8 K
+        System                           4 Services                   0     12.488 K"""
+        lines = tasklist_output.splitlines()
+
+        lines = lines[3:]
+        lines = [line.strip() for line in lines]
+        lines = [line.split("  ") for line in lines]
+        lines = [[x.strip() for x in line if x != ""] for line in lines]
+        lines = [
+            [a, *b.split(" "), c, d.replace(" K", "").replace(".", "")]
+            for a, b, c, d in lines
+        ]
+        lines = [
+            (line[0], int(line[1]), line[2], int(line[3]), int(line[4]))
+            for line in lines
+        ]
+        return lines
+
+    def register_command_callback(
+        self, callback: Callable[[str], Coroutine[Any, Any, Any]]
+    ) -> None:
+        self._command_callbacks.append(callback)
