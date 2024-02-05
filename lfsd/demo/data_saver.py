@@ -44,6 +44,8 @@ class SaverLFSInterface(LFSInterface):
 
     async def on_lfs_data(self, data: LFSData) -> None:
         self._counter += 1
+        if self._counter < 2:
+            await self.send_message_to_local_user("Starting data collection")
 
         if self._only_save_cones_for_first_frames and self._counter > 100:
             # only save cones for the first 100 frames
