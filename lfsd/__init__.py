@@ -13,10 +13,9 @@ if platform.system() != "Windows":
     except ImportError:
         print('You can improve performance by installing "uvloop"')
     else:
-        pass
         uvloop.install()
 
-__version__ = "0.1.4.10"
+__version__ = "0.1.4.11"
 
 
 __all__ = ["LFSInterface", "ConeTypes", "ObservedCone", "LFSData"]

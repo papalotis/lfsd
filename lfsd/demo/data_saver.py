@@ -3,10 +3,12 @@
 """
 This is a demo of the LFSInterface. It prints the number of visible cones and sends a steering command to LFS.
 """
+import asyncio
 import pickle
 from pathlib import Path
 from time import time
 
+import aiofiles
 import typer
 
 from lfsd import LFSInterface
@@ -41,7 +43,6 @@ class SaverLFSInterface(LFSInterface):
         self._only_save_cones_for_first_frames = False
 
     async def on_lfs_data(self, data: LFSData) -> None:
-
         self._counter += 1
 
         if self._only_save_cones_for_first_frames and self._counter > 100:
@@ -58,6 +59,11 @@ class SaverLFSInterface(LFSInterface):
         ):
             self.flush_data()
 
+    async def _write_file(self, filepath: Path, data: list[LFSData]) -> None:
+        bytes_to_write = pickle.dumps(data)
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(bytes_to_write)
+
     def flush_data(self):
         # create data directory if it doesn't exist
         data_path = Path(self._data_dir)
@@ -72,9 +78,8 @@ class SaverLFSInterface(LFSInterface):
         if len(self._data_buffer) == 0:
             return
 
-        # save data to file
-        with open(filepath, "wb") as f:
-            pickle.dump(self._data_buffer, f)
+        buffer_copy = self._data_buffer.copy()
+        asyncio.create_task(self._write_file(filepath, buffer_copy))
 
         # clear buffer and update last flush time
         self._data_buffer.clear()
