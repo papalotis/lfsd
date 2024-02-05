@@ -31,13 +31,24 @@ class SaverLFSInterface(LFSInterface):
             detection_model,
         )
 
+        self._counter = 0
+
         self._data_dir: str | None
         self._buffer_size: int | None
         self._flush_interval: float | None
         self._data_buffer = []
         self._last_flush_time = time()
+        self._only_save_cones_for_first_frames = False
 
     async def on_lfs_data(self, data: LFSData) -> None:
+
+        self._counter += 1
+
+        if self._only_save_cones_for_first_frames and self._counter > 100:
+            # only save cones for the first 100 frames
+            # after that we overwrite the data with an empty list
+            data.processed_outsim_data.visible_cones = []
+
         # add data to buffer
         self._data_buffer.append(data)
         # flush buffer if it's full or if it's been more than flush_interval seconds since the last flush
