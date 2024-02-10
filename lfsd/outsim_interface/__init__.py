@@ -449,7 +449,7 @@ class OutsimInterface:
             throttle_percentage,
             brake_percentage,
             clutch_percentage,
-            float(gear_delta),
+            gear_delta,
             time_,
         )
         await self.vjoy_asocket.send(packet)

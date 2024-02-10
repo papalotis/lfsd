@@ -4,6 +4,7 @@ Relay the desired steering, throttle and brake values to a VJoy device
 import socket
 import struct
 import sys
+from collections import deque
 from itertools import count
 from typing import cast
 
@@ -83,6 +84,9 @@ def main() -> None:
     import os
 
     print(os.getpid())
+
+    delays: deque[float] = deque(maxlen=100)
+
     try:
         j = pyvjoy.VJoyDevice(1)
 
@@ -119,7 +123,11 @@ def main() -> None:
 
                 diff = receive_time - time_send
 
-                print(f"diff: {diff}")
+                delays.append(diff)
+
+                mean_diff = sum(delays) / len(delays)
+
+                print(mean_diff)
 
                 steering_axis_val = map_to_axis(steering, -1, 1)
                 throttle_axis_val = map_to_axis(throttle, 0, 1)
