@@ -42,10 +42,13 @@ def decode_packet(packet: bytes) -> tuple[float, float, float, float, int, float
     Returns:
         The steering, throttle brake, clutch percentages as floats and the gear change as int
     """
-    fmt = "4fif"
-    values = cast(
-        tuple[float, float, float, float, int, float], struct.unpack(fmt, packet)
-    )
+    fmt = "6f"
+    values = cast(list[float], list(struct.unpack(fmt, packet)))
+
+    values[-2] = int(values[-2])
+
+    values = tuple(values)
+
     return values
 
 
@@ -108,6 +111,8 @@ def main() -> None:
                 steering, throttle, brake, clutch, gear_delta, time_ = decode_packet(
                     data
                 )
+
+                print(time_)
 
                 diff = receive_time - time_
 
