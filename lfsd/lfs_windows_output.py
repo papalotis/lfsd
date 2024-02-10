@@ -4,6 +4,7 @@ Relay the desired steering, throttle and brake values to a VJoy device
 import socket
 import struct
 import sys
+import time
 from collections import deque
 from itertools import count
 from typing import cast
@@ -100,7 +101,6 @@ def main() -> None:
                     data = sock.recv(384)
                 except socket.timeout:
                     print("waiting for data")
-                    import time
 
                     time.sleep(0.1)
                     continue
@@ -112,7 +112,7 @@ def main() -> None:
 
                 print(data)
 
-                out = (
+                (
                     steering,
                     throttle,
                     brake,
