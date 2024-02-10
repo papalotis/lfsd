@@ -15,7 +15,7 @@ if platform.system() != "Windows":
     else:
         uvloop.install()
 
-__version__ = "0.1.4.12"
+__version__ = "0.1.4.13"
 
 
 __all__ = ["LFSInterface", "ConeTypes", "ObservedCone", "LFSData"]

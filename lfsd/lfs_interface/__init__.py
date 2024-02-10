@@ -6,6 +6,7 @@ The main interface to LFS
 import asyncio
 import platform
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -78,6 +79,7 @@ class LFSInterface(ABC):
         brake: float,
         clutch: float = 0.0,
         gear_delta: int = 0,
+        time_: float | None = None,
     ) -> None:
         """
         Sends a driving command to LFS.
@@ -88,9 +90,13 @@ class LFSInterface(ABC):
             brake: The brake value (between 0 (no brake) and 1 (full brake))
             clutch: The clutch value (between 0 (no clutch) and 1 (full clutch)). Defaults to 0.0.
             gear_delta: The gear delta (between -1 (downshift) and 1 (upshift)). Defaults to 0.
+            time_: The time at which the command was created.
         """
+        if time_ is None:
+            time_ = time.time()
+
         await self.__outsim_interface.send_outputs(
-            steering, throttle, brake, clutch, gear_delta
+            steering, throttle, brake, clutch, gear_delta, time_
         )
 
     async def teleport_car(
@@ -171,17 +177,18 @@ class LFSInterface(ABC):
         Starts the script that runs LFS in the background
         """
         script_path = Path(__file__).absolute().parent.parent / "lfs_windows_output.py"
-        self.__windows_process = subprocess.Popen(
-            [
-                "powershell.exe",
-                "python",
-                str(script_path),
-                str(self.__outsim_interface.vjoy_port),
-            ],
-            # write output to file
-            stdout=open("lfs_windows_output.log", "w"),
-            stderr=subprocess.STDOUT,
-        )
+        print(f"script path: {script_path}")
+        # self.__windows_process = subprocess.Popen(
+        #     [
+        #         "powershell.exe",
+        #         "python",
+        #         str(script_path),
+        #         str(self.__outsim_interface.vjoy_port),
+        #     ],
+        #     # write output to file
+        #     stdout=open("lfs_windows_output.log", "w"),
+        #     stderr=subprocess.STDOUT,
+        # )
 
     async def __loop_outsim(self) -> None:
         async with self.__outsim_interface:

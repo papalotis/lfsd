@@ -32,7 +32,7 @@ def linearly_interpolate(
 JOYSTICK_SOCKET = 30002
 
 
-def decode_packet(packet: bytes) -> tuple[float, float, float, float, int]:
+def decode_packet(packet: bytes) -> tuple[float, float, float, float, int, float]:
     """
     Decodes a packet containing steering, throttle and brake information
 
@@ -42,8 +42,10 @@ def decode_packet(packet: bytes) -> tuple[float, float, float, float, int]:
     Returns:
         The steering, throttle brake, clutch percentages as floats and the gear change as int
     """
-    fmt = "4fi"
-    values = cast(tuple[float, float, float, float, int], struct.unpack(fmt, packet))
+    fmt = "4fif"
+    values = cast(
+        tuple[float, float, float, float, int, float], struct.unpack(fmt, packet)
+    )
     return values
 
 
@@ -98,10 +100,14 @@ def main() -> None:
                     time.sleep(0.1)
                     continue
 
+                receive_time = time.time()
+
                 if not data:
                     break
 
-                steering, throttle, brake, clutch, gear_delta = decode_packet(data)
+                steering, throttle, brake, clutch, gear_delta, time_ = decode_packet(
+                    data
+                )
 
                 steering_axis_val = map_to_axis(steering, -1, 1)
                 throttle_axis_val = map_to_axis(throttle, 0, 1)
