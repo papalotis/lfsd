@@ -442,7 +442,7 @@ class OutsimInterface:
             gear_delta: The gear delta (-1 downshift, 0 neutral, 1 upshift)
             time_: The time at which the command is sent (this is used to estimate the delay in the command being sent to the game and the game receiving it)
         """
-        fmt = "6f"
+        fmt = "4fid"
         packet = struct.pack(
             fmt,
             steering_percentage,

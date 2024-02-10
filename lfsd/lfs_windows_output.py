@@ -42,12 +42,10 @@ def decode_packet(packet: bytes) -> tuple[float, float, float, float, int, float
     Returns:
         The steering, throttle brake, clutch percentages as floats and the gear change as int
     """
-    fmt = "6f"
-    values = cast(list[float], list(struct.unpack(fmt, packet)))
-
-    values[-2] = int(values[-2])
-
-    values = tuple(values)
+    fmt = "4fid"
+    values = cast(
+        tuple[float, float, float, float, int, float], struct.unpack(fmt, packet)
+    )
 
     return values
 
@@ -95,7 +93,7 @@ def main() -> None:
             for _ in count():
                 # Receive data.
                 try:
-                    data = sock.recv(64)
+                    data = sock.recv(384)
                 except socket.timeout:
                     print("waiting for data")
                     import time
@@ -108,13 +106,18 @@ def main() -> None:
                 if not data:
                     break
 
-                steering, throttle, brake, clutch, gear_delta, time_ = decode_packet(
-                    data
-                )
+                print(data)
 
-                print(time_)
+                out = (
+                    steering,
+                    throttle,
+                    brake,
+                    clutch,
+                    gear_delta,
+                    time_send,
+                ) = decode_packet(data)
 
-                diff = receive_time - time_
+                diff = receive_time - time_send
 
                 print(f"diff: {diff}")
 
