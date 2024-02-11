@@ -91,8 +91,8 @@ def parse_car_info(path: Path) -> dict[str, Any]:
 
 
 class BinInterface:
-    def __init__(self, lfs_path: Path) -> None:
-        self.lfs_path = lfs_path
+    def __init__(self, lfs_path: Path | str) -> None:
+        self.lfs_path = Path(lfs_path)
 
     def load_bin_file_for_car(self, car_name: str) -> dict[str, Any]:
         path = self.lfs_path / "data" / "raf" / f"{car_name}_info.bin"
