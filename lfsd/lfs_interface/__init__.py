@@ -270,3 +270,17 @@ class LFSInterface(ABC):
 
     async def send_message_to_local_user(self, message: str) -> None:
         await self.__outsim_interface.send_say_message_command(message)
+
+    def register_autocross_object_hit_callback(
+        self, callback: Callable[[], Coroutine[Any, Any, Any]]
+    ) -> None:
+        """
+        Register a callback function that is called when an autocross object is hit.
+
+        Args:
+            callback: The callback function to be executed.
+
+        Returns:
+            None
+        """
+        self.__outsim_interface.register_autocross_object_hit_callback(callback)

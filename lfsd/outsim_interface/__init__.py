@@ -123,6 +123,10 @@ class OutsimInterface:
 
         self._command_callbacks: list[Callable[[str], Coroutine[Any, Any, Any]]] = []
 
+        self.autocross_object_hit_callbacks: list[
+            Callable[[], Coroutine[Any, Any, Any]]
+        ] = []
+
         self._mmap_path = get_propagator_write_path() / "mmap_data"
         self._mmap_path.parent.mkdir(parents=True, exist_ok=True)
         self._mmap_fd = os.open(str(self._mmap_path.absolute()), os.O_RDWR)
@@ -284,6 +288,7 @@ class OutsimInterface:
                 new_insim_state,
                 is_race_start,
                 command,
+                is_autocross_object_hit,
             ) = handle_insim_packet(packet)
             if to_send is not None:
                 writer.write(to_send)
@@ -300,6 +305,10 @@ class OutsimInterface:
             if command is not None:
                 for callback in self._command_callbacks:
                     aio.create_task(callback(command))
+
+            if is_autocross_object_hit:
+                for callback in self.autocross_object_hit_callbacks:
+                    aio.create_task(callback())
 
         return buffer
 
@@ -638,3 +647,8 @@ class OutsimInterface:
         self, callback: Callable[[str], Coroutine[Any, Any, Any]]
     ) -> None:
         self._command_callbacks.append(callback)
+
+    def register_autocross_object_hit_callback(
+        self, callback: Callable[[], Coroutine[Any, Any, Any]]
+    ) -> None:
+        self.autocross_object_hit_callbacks.append(callback)

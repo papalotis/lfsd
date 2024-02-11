@@ -353,17 +353,19 @@ def handle_insim_packet(
     isp_rst = 17  # race start
     isp_sta = 5  # state
     isp_acr = 55  # admin command report
+    isp_axo = 44  # autocross object
     tiny_none = 0
 
     packet_type = packet[1]
 
-    packet_to_send, layout_name, insim_state, is_race_start, command = (
-        None,
-        None,
-        None,
-        False,
-        None,
-    )
+    (
+        packet_to_send,
+        layout_name,
+        insim_state,
+        is_race_start,
+        command,
+        autox_object_hit,
+    ) = (None, None, None, False, None, False)
 
     # Check the packet type.
     if packet_type == isp_tiny:
@@ -383,5 +385,14 @@ def handle_insim_packet(
         insim_state = InSimState.from_bytes(packet)
     elif packet_type == isp_acr:
         command = parse_admin_command_report(packet)
+    elif packet_type == isp_axo:
+        autox_object_hit = True
 
-    return packet_to_send, layout_name, insim_state, is_race_start, command
+    return (
+        packet_to_send,
+        layout_name,
+        insim_state,
+        is_race_start,
+        command,
+        autox_object_hit,
+    )
