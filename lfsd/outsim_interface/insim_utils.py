@@ -17,6 +17,8 @@ import math
 import struct
 from dataclasses import dataclass
 
+from typing_extensions import Self
+
 from lfsd.lyt_interface.io.write_lyt import _to_lyt_heading
 
 
@@ -192,9 +194,6 @@ def create_say_packet(message: str) -> bytes:
     assert len(message) <= 55, "Message must be at most 55 characters long"
 
     return create_mst_packet(f"/say {message}")
-
-
-from typing_extensions import Self
 
 
 @dataclass

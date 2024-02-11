@@ -10,9 +10,11 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Iterable
+from typing import Any, AsyncGenerator, Callable, Coroutine, Iterable
 
+from lfsd.bin_interface import BinInterface
 from lfsd.common import get_wsl2_host_ip_address, is_wsl2
+from lfsd.common_types import FloatArray
 from lfsd.lyt_interface.detection_model import (
     BasicConicalDetectionModel,
     DetectionModel,
@@ -58,6 +60,7 @@ class LFSInterface(ABC):
             game_address=lfs_computer_ip,
             detection_model=detection_model,
         )
+        self.__bin_interface = BinInterface(lfs_installation_path)
 
         self.__outsim_interface.register_race_start_callback(self.on_race_start)
 
@@ -145,7 +148,7 @@ class LFSInterface(ABC):
             await self.toggle_lfs_pause()
 
     @asynccontextmanager
-    async def lfs_paused(self) -> Iterable[None]:
+    async def lfs_paused(self) -> AsyncGenerator[Any, Any]:
         """
         Context manager that pauses LFS while inside the context.
         """
@@ -284,3 +287,30 @@ class LFSInterface(ABC):
             None
         """
         self.__outsim_interface.register_autocross_object_hit_callback(callback)
+
+    async def load_layout(self, layout_name: str) -> None:
+        if (
+            len(layout_name) > 4
+            and layout_name[:2].isupper()
+            and layout_name[2] == "_"
+            and layout_name[3].isdigit()
+        ):
+            layout_name = layout_name[4:]
+
+        await self.__outsim_interface.send_lfs_command(f"/axload {layout_name}")
+        await asyncio.sleep(0.1)
+        await self.__outsim_interface.send_lfs_command("/restart")
+
+    @property
+    def active_track(self) -> str | None:
+        return self.__outsim_interface.active_layout_name[:4]
+
+    @property
+    def layouts(self) -> list[Path]:
+        lfs_path = self.__outsim_interface.lfs_path
+        layout_path = Path(lfs_path) / "data" / "layout"
+
+        return list(layout_path.glob("*.lyt"))
+
+    def wheel_offsets_xy(self, car_name: str) -> FloatArray:
+        return self.__bin_interface.wheel_offsets_xy(car_name)

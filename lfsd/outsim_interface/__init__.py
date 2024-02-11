@@ -30,6 +30,7 @@ from lfsd.outsim_interface.insim_utils import (
     InSimState,
     create_insim_initialization_packet,
     create_key_press_command_packet,
+    create_mst_packet,
     create_request_IS_STA_packet,
     create_say_packet,
     create_teleport_command_packet,
@@ -652,3 +653,14 @@ class OutsimInterface:
         self, callback: Callable[[], Coroutine[Any, Any, Any]]
     ) -> None:
         self.autocross_object_hit_callbacks.append(callback)
+
+    async def send_lfs_command(self, command: str) -> None:
+        """
+        Send a command to LFS.
+
+        Args:
+            command: The command to send to LFS.
+        """
+        assert self._insim_writer is not None
+        packet = create_mst_packet(command)
+        await self.send_message_to_insim(packet)
