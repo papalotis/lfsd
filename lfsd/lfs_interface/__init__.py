@@ -9,9 +9,8 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from functools import cached_property
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Coroutine, Iterable
+from typing import Any, AsyncGenerator, Callable, Coroutine
 
 from lfsd.bin_interface import BinInterface
 from lfsd.common import get_wsl2_host_ip_address, is_wsl2
@@ -313,6 +312,5 @@ class LFSInterface(ABC):
 
         return list(layout_path.glob("*.lyt"))
 
-    @cached_property
     def wheel_offsets_xy(self, car_name: str) -> FloatArray:
         return self.__bin_interface.wheel_offsets_xy(car_name)
