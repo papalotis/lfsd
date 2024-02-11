@@ -107,8 +107,19 @@ class BinInterface:
         car_info = self.load_bin_file_for_car(car_name)
 
         return_value: list[tuple[float, float]] = []
-        for wheel in car_info["wheels"]:
+        for name, wheel in car_info["wheels"].items():
             x, y, _, _ = wheel[2]
+
+            # the coordinate system of lfs has the car pointing upwards, so we need to swap x and y and negate the new y
+            x, y = y, -x
+
+            # print(name, x, y, z, um)
             return_value.append((x, y))
 
         return np.array(return_value)
+
+
+if __name__ == "__main__":
+    bin_interface = BinInterface("/mnt/c/LFS")
+
+    print(bin_interface.wheel_offsets_xy("MRT"))
