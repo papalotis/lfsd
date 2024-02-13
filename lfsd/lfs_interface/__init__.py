@@ -20,6 +20,7 @@ from lfsd.lyt_interface.detection_model import (
     DetectionModel,
 )
 from lfsd.outsim_interface import LFSData, OutsimInterface
+from lfsd.outsim_interface.insim_utils import ObjectHitEvent
 
 
 class LFSInterface(ABC):
@@ -275,7 +276,7 @@ class LFSInterface(ABC):
         await self.__outsim_interface.send_say_message_command(message)
 
     def register_autocross_object_hit_callback(
-        self, callback: Callable[[], Coroutine[Any, Any, Any]]
+        self, callback: Callable[[ObjectHitEvent], Coroutine[Any, Any, Any]]
     ) -> None:
         """
         Register a callback function that is called when an autocross object is hit.

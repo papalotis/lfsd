@@ -1,3 +1,5 @@
+from rich import print
+
 from lfsd import LFSData, LFSInterface
 
 
@@ -10,11 +12,11 @@ class AutocrossObjectHit(LFSInterface):
     async def on_lfs_data(self, data: LFSData) -> None:
         pass
 
-    async def object_hit(self) -> None:
+    async def object_hit(self, obj) -> None:
         """
         This method runs when an autocross object is hit.
         """
-        print("hit")
+        print(obj)
 
 
 if __name__ == "__main__":

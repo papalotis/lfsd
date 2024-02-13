@@ -40,7 +40,7 @@ def create_insim_initialization_packet(program_name: str, password: str) -> byte
         1,  # ReqI
         0,  # Zero
         0,  # UDPPort
-        0,  # Flags
+        0b10000000,  # Flags (receive IS_OBH packets)
         0,  # Sp0
         b" ",  # Prefix
         0,  # Interval
@@ -334,9 +334,32 @@ def parse_admin_command_report(packet: bytes) -> str:
     return msg
 
 
+@dataclass
+class ObjectHitEvent:
+    x: float
+    y: float
+    index: int
+    timestamp: int
+
+    @classmethod
+    def from_bytes(cls, packet: bytes) -> Self:
+        x_upper = packet[-7]
+        x_lower = packet[-8]
+        y_upper = packet[-5]
+        y_lower = packet[-6]
+        x = (x_upper * 256 + x_lower) / 16
+        y = (y_upper * 256 + y_lower) / 16
+
+        object_index = int(packet[-2])
+
+        timestamp = struct.unpack("H", packet[6:8])[0]
+
+        return ObjectHitEvent(x, y, object_index, timestamp)
+
+
 def handle_insim_packet(
     packet: bytes,
-) -> tuple[bytes | None, str | None, InSimState | None, bool, str | None]:
+) -> tuple[bytes | None, str | None, InSimState | None, bool, ObjectHitEvent | None]:
     """
     Handle an insim packet. It only handles the minimum number of packets that we
     need. This is not an full insim client.
@@ -352,7 +375,7 @@ def handle_insim_packet(
     isp_rst = 17  # race start
     isp_sta = 5  # state
     isp_acr = 55  # admin command report
-    isp_axo = 44  # autocross object
+    isp_obh = 51  # object hit
     tiny_none = 0
 
     packet_type = packet[1]
@@ -363,8 +386,8 @@ def handle_insim_packet(
         insim_state,
         is_race_start,
         command,
-        autox_object_hit,
-    ) = (None, None, None, False, None, False)
+        autox_hit_object,
+    ) = (None, None, None, False, None, None)
 
     # Check the packet type.
     if packet_type == isp_tiny:
@@ -384,8 +407,8 @@ def handle_insim_packet(
         insim_state = InSimState.from_bytes(packet)
     elif packet_type == isp_acr:
         command = parse_admin_command_report(packet)
-    elif packet_type == isp_axo:
-        autox_object_hit = True
+    elif packet_type == isp_obh:
+        autox_hit_object = ObjectHitEvent.from_bytes(packet)
 
     return (
         packet_to_send,
@@ -393,5 +416,5 @@ def handle_insim_packet(
         insim_state,
         is_race_start,
         command,
-        autox_object_hit,
+        autox_hit_object,
     )
