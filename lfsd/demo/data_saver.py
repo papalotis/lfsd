@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 """
-This is a demo of the LFSInterface. It prints the number of visible cones and sends a steering command to LFS.
+This is a demo of the LFSInterface. It prints stores data from LFS to a file.
 """
 import asyncio
 import pickle
@@ -11,7 +11,7 @@ from time import time
 import aiofiles
 import typer
 
-from lfsd import LFSInterface
+from lfsd import LFSInterface, LFSSamplesDict, ObjectHitEvent
 from lfsd.lyt_interface.detection_model import DetectionModel
 from lfsd.outsim_interface import LFSData
 
@@ -38,22 +38,34 @@ class SaverLFSInterface(LFSInterface):
         self._data_dir: str | None
         self._buffer_size: int | None
         self._flush_interval: float | None
-        self._data_buffer = []
+        self._data_buffer = self.create_empty_buffer()
         self._last_flush_time = time()
         self._only_save_cones_for_first_frames = False
 
+    def create_empty_buffer(self) -> LFSSamplesDict:
+        return LFSSamplesDict(lfs_data=[], object_hit_events=[])
+
+    async def autox_object_hit(self, object_hit_event: ObjectHitEvent) -> None:
+        self._data_buffer["object_hit_events"].append(object_hit_event)
+
     async def on_lfs_data(self, data: LFSData) -> None:
         self._counter += 1
-        if self._counter < 2:
+
+        wait_for = 300
+
+        if self._counter < wait_for:
+            return
+
+        if self._counter == wait_for:
             await self.send_message_to_local_user("Starting data collection")
 
-        if self._only_save_cones_for_first_frames and self._counter > 100:
+        if self._only_save_cones_for_first_frames and self._counter > (wait_for + 100):
             # only save cones for the first 100 frames
             # after that we overwrite the data with an empty list
             data.processed_outsim_data.visible_cones = []
 
         # add data to buffer
-        self._data_buffer.append(data)
+        self._data_buffer["lfs_data"].append(data)
         # flush buffer if it's full or if it's been more than flush_interval seconds since the last flush
         if (
             len(self._data_buffer) >= self._buffer_size
@@ -84,7 +96,7 @@ class SaverLFSInterface(LFSInterface):
         asyncio.create_task(self._write_file(filepath, buffer_copy))
 
         # clear buffer and update last flush time
-        self._data_buffer.clear()
+        self._data_buffer = self.create_empty_buffer()
         self._last_flush_time = time()
 
     def combine_data_files(self):
