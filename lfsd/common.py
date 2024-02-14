@@ -71,7 +71,7 @@ def get_wsl2_host_ip_address() -> str:
     text = Path("/etc/resolv.conf").read_text()
     nameserver, ip_address = text.splitlines()[-1].split()
     assert nameserver == "nameserver"
-    print("IP address of the host machine is", ip_address)
+    # print("IP address of the host machine is", ip_address)
     return ip_address
 
 
