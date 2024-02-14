@@ -1,4 +1,4 @@
-"""An Live for Speed interface for Formula Student Driverless"""
+"""A Live for Speed interface for Formula Student Driverless"""
 
 import platform
 
