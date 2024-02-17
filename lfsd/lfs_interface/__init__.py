@@ -315,3 +315,6 @@ class LFSInterface(ABC):
 
     def wheel_offsets_xy(self, car_name: str) -> FloatArray:
         return self.__bin_interface.wheel_offsets_xy(car_name)
+
+    async def send_lfs_restart_race_command(self) -> None:
+        await self.__outsim_interface.send_lfs_command("/restart")
