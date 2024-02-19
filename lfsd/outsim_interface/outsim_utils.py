@@ -7,8 +7,7 @@ Description: Provides functions for decoding outsim packets
 (see https://en.lfsmanual.net/wiki/InSim.txt)
 """
 import struct
-from dataclasses import dataclass
-from enum import IntEnum
+from dataclasses import dataclass, field
 from typing import Tuple, cast
 
 import numpy as np
@@ -293,7 +292,6 @@ class RawOutgaugeData:
     time: int
     car: str
     gear: int
-    player_id: int
     speed: MetersPerSecond
     rpm: float  # rpm
     turbo_pressure: Bar  # bar
@@ -301,6 +299,9 @@ class RawOutgaugeData:
     fuel: Ratio  # [0-1]
     oil_pressure: Bar
     oil_temperature: Celsius
+    player_id: int = field(
+        default=0
+    )  # when working on my master thesis I disovered that this field is not always present in the outgauge data so I moved it down here and gave it a default value of 0. this seems to solve the issue. In all instances where this class is created, the arguemnt is set as a keyword argument, so this should not break anything
 
 
 def decode_outgauge_data(data: bytes) -> RawOutgaugeData:
