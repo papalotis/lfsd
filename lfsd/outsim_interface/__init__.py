@@ -640,7 +640,13 @@ class OutsimInterface:
             for a, b, c, d in lines
         ]
         lines = [
-            (line[0], int(line[1]), line[2], int(line[3]), int(line[4]))
+            (
+                line[0],
+                int(line[1]),
+                line[2],
+                int(line[3]),
+                int(line[4]) if line[4] != "N/A" else 0,
+            )
             for line in lines
         ]
         return lines
