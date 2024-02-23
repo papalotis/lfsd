@@ -17,7 +17,7 @@ if platform.system() != "Windows":
     else:
         uvloop.install()
 
-__version__ = "0.1.4.30"
+__version__ = "0.1.4.31"
 
 
 __all__ = [
