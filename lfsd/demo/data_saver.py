@@ -42,10 +42,12 @@ class SaverLFSInterface(LFSInterface):
         self._last_flush_time = time()
         self._only_save_cones_for_first_frames = False
 
+        self.register_autocross_object_hit_callback(self.on_autox_object_hit)
+
     def create_empty_buffer(self) -> LFSSamplesDict:
         return LFSSamplesDict(lfs_data=[], object_hit_events=[])
 
-    async def autox_object_hit(self, object_hit_event: ObjectHitEvent) -> None:
+    async def on_autox_object_hit(self, object_hit_event: ObjectHitEvent) -> None:
         self._data_buffer["object_hit_events"].append(object_hit_event)
 
     async def on_lfs_data(self, data: LFSData) -> None:

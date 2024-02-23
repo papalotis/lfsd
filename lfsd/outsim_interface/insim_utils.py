@@ -359,7 +359,9 @@ class ObjectHitEvent:
 
 def handle_insim_packet(
     packet: bytes,
-) -> tuple[bytes | None, str | None, InSimState | None, bool, ObjectHitEvent | None]:
+) -> tuple[
+    bytes | None, str | None, InSimState | None, bool, str | None, ObjectHitEvent | None
+]:
     """
     Handle an insim packet. It only handles the minimum number of packets that we
     need. This is not an full insim client.
