@@ -439,6 +439,9 @@ class OutsimInterface:
         clutch_percentage: float,
         gear_delta: int,
         time_: float,
+        tee_steering: float,
+        tee_throttle: float,
+        tee_brake: float,
     ) -> None:
         """
         Send the outputs to the vjoy port
@@ -452,8 +455,11 @@ class OutsimInterface:
             clutch_percentage: The percentage of the clutch (0 no clutch, 1 full clutch)
             gear_delta: The gear delta (-1 downshift, 0 neutral, 1 upshift)
             time_: The time at which the command is sent (this is used to estimate the delay in the command being sent to the game and the game receiving it)
+            tee_steering: The tee parameter for the steering (pt1). If set to 0, the new inputs are set exactly. The higher the value the more the new inputs are ignored.
+            tee_throttle: Like `tee_steering` but for the throttle.
+            tee_brake: Like `tee_steering` but for the brake.
         """
-        fmt = "4fid"
+        fmt = "4fid3f"
         packet = struct.pack(
             fmt,
             steering_percentage,
@@ -462,6 +468,9 @@ class OutsimInterface:
             clutch_percentage,
             gear_delta,
             time_,
+            tee_steering,
+            tee_throttle,
+            tee_brake,
         )
         await self.vjoy_asocket.send(packet)
 

@@ -84,6 +84,9 @@ class LFSInterface(ABC):
         clutch: float = 0.0,
         gear_delta: int = 0,
         time_: float | None = None,
+        tee_steering: float = 0.0,
+        tee_throttle: float = 0.0,
+        tee_brake: float = 0.0,
     ) -> None:
         """
         Sends a driving command to LFS.
@@ -95,12 +98,23 @@ class LFSInterface(ABC):
             clutch: The clutch value (between 0 (no clutch) and 1 (full clutch)). Defaults to 0.0.
             gear_delta: The gear delta (between -1 (downshift) and 1 (upshift)). Defaults to 0.
             time_: The time at which the command was created.
+            tee_steering: The tee value to use for steering (for pt1 filter). If set to 0 (default), it will set the steering value to the exact value. For any other value, it will use a PT1 filter to smooth the steering value. The higher the value, the more smoothing will be applied.
+            tee_throttle: The tee value to use for throttle (for pt1 filter), defaults to 0.0
+            tee_brake: The tee value to use for brake (for pt1 filter), defaults to 0.0
         """
         if time_ is None:
             time_ = time.time()
 
         await self.__outsim_interface.send_outputs(
-            steering, throttle, brake, clutch, gear_delta, time_
+            steering,
+            throttle,
+            brake,
+            clutch,
+            gear_delta,
+            time_,
+            tee_steering,
+            tee_throttle,
+            tee_brake,
         )
 
     async def teleport_car(
